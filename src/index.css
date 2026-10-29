@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: #F8FAFC;
+    color: #0F172A;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+}
+
+/* Clean White Theme Card Style */
+.app-card {
+  background: #FFFFFF;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+}
+
+/* Dark Theme Card Style */
+.dark-card {
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #FFFFFF;
+}
