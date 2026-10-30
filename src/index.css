@@ -1,23 +1,69 @@
 @import "tailwindcss";
 
-@layer base {
-  body {
-    background-color: #F8FAFC;
-    color: #0F172A;
-    font-family: system-ui, -apple-system, sans-serif;
+@layer utilities {
+  /* Frosted Light Glass Card */
+  .glass-card-light {
+    background: rgba(255, 255, 255, 0.65);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+  }
+
+  /* Deep Liquid Dark Glass Card */
+  .glass-card-dark {
+    background: rgba(18, 24, 38, 0.75);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
+
+  /* Liquid Glass Pill / Button */
+  .glass-pill {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.1));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.6), 0 4px 15px rgba(0, 0, 0, 0.05);
   }
 }
 
-/* Clean White Theme Card Style */
-.app-card {
-  background: #FFFFFF;
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+/* Custom Smooth Animations */
+@keyframes liquidPulse {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.4), inset 0 0 10px rgba(255, 255, 255, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 35px rgba(59, 130, 246, 0.7), inset 0 0 15px rgba(255, 255, 255, 0.8);
+  }
 }
 
-/* Dark Theme Card Style */
-.dark-card {
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #FFFFFF;
+@keyframes floatAnim {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+
+.animate-liquid-glow {
+  animation: liquidPulse 3s infinite ease-in-out;
+}
+
+.animate-float-slow {
+  animation: floatAnim 4s infinite ease-in-out;
+}
+
+/* Custom Scrollbar for sleek POS feel */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(150, 150, 150, 0.2);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 150, 150, 0.4);
 }

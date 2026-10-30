@@ -1,81 +1,110 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Button from '../components/common/Button';
-import { loginUser } from '../services/authService';
-import { useAuthStore } from '../store/useAuthStore';
-import { ShoppingBag, Mail, Lock, ArrowLeft } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { Mail, Lock, ArrowRight } from 'lucide-react';
 
 export default function Login() {
-  const navigate = useNavigate();
-  const { setUser, setToken } = useAuthStore();
-  const [form, setForm] = useState({ username: '', password: '' });
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleLogin = (provider = 'email') => {
-    setToken('fifa_glass_token');
-    setUser({ name: 'Richard Joseph', email: form.username || 'richard@dukapooa.co.tz', role: 'Owner' });
-    navigate('/app');
+  const { login } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!email || !password) {
+      setError('Ingiza barua pepe na neno la siri kununua/kuingia');
+      return;
+    }
+
+    setError('');
+    setLoading(true);
+    try {
+      // Direct login without OTP requirement
+      await login(email, password);
+      navigate('/welcome');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Barua pepe au neno la siri siyo sahihi');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSocialLogin = () => {
+    // Quick social sign-in bypasses OTP straight to splash screen
+    navigate('/welcome');
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0F17] text-white flex flex-col justify-center items-center px-4 relative overflow-hidden">
-      
-      {/* Background FIFA Glass Glows */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-slate-600/10 rounded-full blur-3xl pointer-events-none"></div>
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-slate-200 shadow-xl space-y-6 text-center">
+        
+        <div className="space-y-1">
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Duka Pooa POS</h1>
+          <p className="text-xs text-slate-500">Ingiza barua pepe na neno la siri kuingia</p>
+        </div>
 
-      <button 
-        onClick={() => navigate('/')} 
-        className="absolute top-8 left-8 flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-white transition-colors cursor-pointer fifa-card px-4 py-2 rounded-xl"
-      >
-        <ArrowLeft className="w-4 h-4" /> Rudi Nyumbani
-      </button>
-
-      <div className="w-full max-w-md fifa-card p-8 rounded-3xl space-y-6 relative z-10 shadow-2xl">
-        <div className="text-center space-y-2">
-          <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-slate-700 to-slate-500 text-white flex items-center justify-center font-black text-2xl shadow-xl border border-slate-600">
-            <ShoppingBag className="w-7 h-7" />
+        {error && (
+          <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-medium">
+            {error}
           </div>
-          <h2 className="text-2xl font-black tracking-tight text-white">Ingia Duka Pooa POS</h2>
-          <p className="text-xs text-slate-400">Chagua njia ya kuingia kwenye mfumo</p>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-3.5 text-left">
+          <div className="relative">
+            <Mail className="w-4 h-4 absolute left-4 top-3.5 text-slate-400" />
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="barua-pepe@mfano.com"
+              className="w-full pl-11 pr-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-xs focus:outline-none focus:border-blue-500 font-medium"
+            />
+          </div>
+
+          <div className="relative">
+            <Lock className="w-4 h-4 absolute left-4 top-3.5 text-slate-400" />
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Neno la siri"
+              className="w-full pl-11 pr-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-xs focus:outline-none focus:border-blue-500 font-medium"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-xs transition-all cursor-pointer shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50"
+          >
+            {loading ? 'Inaingia...' : 'Ingia Mfumoni'} <ArrowRight className="w-4 h-4" />
+          </button>
+        </form>
+
+        <div className="relative flex py-1 items-center">
+          <div className="flex-grow border-t border-slate-200"></div>
+          <span className="shrink mx-3 text-[11px] text-slate-400 font-medium">au ingia na</span>
+          <div className="flex-grow border-t border-slate-200"></div>
         </div>
 
-        {/* Multi-Auth Buttons (Google, Apple, Microsoft, Email, Phone) */}
-        <div className="space-y-3 pt-2">
-          <button 
-            onClick={() => handleLogin('email')}
-            className="w-full py-3 px-4 rounded-2xl fifa-glass-input flex items-center justify-center gap-3 text-sm font-bold hover:bg-slate-800 transition-all cursor-pointer"
-          >
-            <Mail className="w-4 h-4 text-slate-300" /> Continue with email
-          </button>
+        <div className="grid grid-cols-3 gap-2">
+          <button onClick={handleSocialLogin} type="button" className="py-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 font-semibold text-xs text-slate-700">Google</button>
+          <button onClick={handleSocialLogin} type="button" className="py-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 font-semibold text-xs text-slate-700">Apple</button>
+          <button onClick={handleSocialLogin} type="button" className="py-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 font-semibold text-xs text-slate-700">Microsoft</button>
+        </div>
 
-          <button 
-            onClick={() => handleLogin('google')}
-            className="w-full py-3 px-4 rounded-2xl fifa-glass-input flex items-center justify-center gap-3 text-sm font-bold hover:bg-slate-800 transition-all cursor-pointer"
-          >
-            <span className="font-black text-amber-400">G</span> Continue with Google
-          </button>
-
-          <button 
-            onClick={() => handleLogin('apple')}
-            className="w-full py-3 px-4 rounded-2xl fifa-glass-input flex items-center justify-center gap-3 text-sm font-bold hover:bg-slate-800 transition-all cursor-pointer"
-          >
-            <span></span> Continue with Apple
-          </button>
-
-          <button 
-            onClick={() => handleLogin('microsoft')}
-            className="w-full py-3 px-4 rounded-2xl fifa-glass-input flex items-center justify-center gap-3 text-sm font-bold hover:bg-slate-800 transition-all cursor-pointer"
-          >
-            <span className="grid grid-cols-2 gap-0.5 w-3.5 h-3.5">
-              <span className="bg-rose-500"></span><span className="bg-emerald-500"></span>
-              <span className="bg-amber-500"></span><span className="bg-blue-500"></span>
-            </span> Continue with Microsoft
+        <div className="pt-2 text-xs text-slate-500">
+          Huna akaunti?{' '}
+          <button onClick={() => navigate('/register')} className="font-bold text-blue-600 hover:underline cursor-pointer">
+            Fungua akaunti hapa
           </button>
         </div>
 
-        <div className="text-center text-xs text-slate-400 pt-2">
-          Huna akaunti? <span onClick={() => navigate('/register')} className="text-slate-200 font-bold hover:underline cursor-pointer">Jisajili hapa</span>
-        </div>
       </div>
     </div>
   );
