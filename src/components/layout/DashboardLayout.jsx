@@ -1,10 +1,7 @@
-import React, { useEffect } from "react";
-import Sidebar from "./Sidebar";
-import TopBar from "./TopBar";
-import MobileNav from "./MobileNav";
+import React, { useEffect } from 'react';
+import FloatingBottomBar from './FloatingBottomBar';
 
 export default function DashboardLayout({ children }) {
-  // Sync dark class on mount from saved preference
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'dark') {
@@ -15,27 +12,14 @@ export default function DashboardLayout({ children }) {
   }, []);
 
   return (
-    <div className="flex h-screen bg-[#f3f5f9] dark:bg-[#090d16] text-slate-900 dark:text-slate-100 transition-colors duration-300 overflow-hidden font-sans">
-      
-      {/* Sidebar (Desktop) */}
-      <div className="hidden md:block">
-        <Sidebar />
-      </div>
+    <div className="min-h-screen bg-[#f3f5f9] dark:bg-[#090d16] text-slate-900 dark:text-slate-100 transition-colors duration-300 font-sans selection:bg-blue-600 selection:text-white">
+      {/* Content wrapper with generous bottom padding so the floating dock never obstructs items */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-32">
+        {children}
+      </main>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden">
-        <TopBar />
-        
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 pb-24 md:pb-8 scrollbar-none">
-          {children}
-        </main>
-      </div>
-
-      {/* Mobile Floating Island Nav */}
-      <div className="md:hidden">
-        <MobileNav />
-      </div>
-
+      {/* Floating Bottom VisionOS Dock */}
+      <FloatingBottomBar />
     </div>
   );
 }
