@@ -8,7 +8,8 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import OtpVerification from './pages/OtpVerification'; // <--- Registered here!
 import WelcomeSplash from './pages/WelcomeSplash';
-import DashboardLayout from './layouts/DashboardLayout';
+import BusinessOnboarding from './pages/BusinessOnboarding';
+import DashboardLayout from './components/layout/DashboardLayout';
 import Overview from './pages/Overview';
 import PointOfSale from './pages/PointOfSale';
 import ProductsStock from './pages/ProductsStock';
@@ -24,6 +25,7 @@ import MenuPage from './pages/MenuPage';
 import EconomicsDashboard from './pages/EconomicsDashboard';
 import ToastContainer from './components/common/ToastContainer';
 
+
 export default function App() {
   return (
     <AuthProvider>
@@ -35,6 +37,7 @@ export default function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/otp-verify" element={<OtpVerification />} /> {/* <--- Route active */}
           <Route path="/welcome" element={<WelcomeSplash />} />
+          <Route path="/onboarding/splash" element={<BusinessOnboarding />} />
           <Route
             path="/app/*"
             element={

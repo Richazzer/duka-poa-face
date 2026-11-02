@@ -1,117 +1,192 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { AlertCircle, ShieldCheck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
 export default function OtpVerification() {
-  const [otpValues, setOtpValues] = useState(['', '', '', '', '', '']);
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
   const inputRefs = useRef([]);
-  const { verifyOtp, sendOtp } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-  const email = location.state?.email || 'caesarrichazzer@gmail.com';
 
   useEffect(() => {
-    if (email) {
-      sendOtp(email).catch(() => {});
+    // Grab the email stored during signup
+    const savedEmail = sessionStorage.getItem('pending_email');
+    if (!savedEmail) {
+      // If no registration was started, go back to register
+      navigate('/register');
+      return;
     }
-  }, [email]);
+    setEmail(savedEmail);
+
+    // Auto-focus first box
+    if (inputRefs.current[0]) {
+      inputRefs.current[0].focus();
+    }
+  }, [navigate]);
 
   const handleChange = (index, value) => {
-    if (isNaN(value)) return;
-    const newValues = [...otpValues];
-    newValues[index] = value;
-    setOtpValues(newValues);
-    if (value && index < 5) {
-      inputRefs.current[index + 1].focus();
+    const cleanValue = value.replace(/\D/g, '');
+    const newOtp = [...otp];
+
+    if (!cleanValue) {
+      newOtp[index] = '';
+      setOtp(newOtp);
+      return;
+    }
+
+    newOtp[index] = cleanValue.slice(-1);
+    setOtp(newOtp);
+
+    if (index < 5 && cleanValue) {
+      inputRefs.current[index + 1]?.focus();
     }
   };
 
   const handleKeyDown = (index, e) => {
-    if (e.key === 'Backspace' && !otpValues[index] && index > 0) {
-      inputRefs.current[index - 1].focus();
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
     }
+  };
+
+  const handlePaste = (e) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').trim().replace(/\D/g, '').slice(0, 6);
+    if (!pastedData) return;
+
+    const newOtp = [...otp];
+    pastedData.split('').forEach((char, idx) => {
+      newOtp[idx] = char;
+    });
+    setOtp(newOtp);
+
+    const focusIndex = Math.min(pastedData.length, 5);
+    inputRefs.current[focusIndex]?.focus();
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const fullOtp = otpValues.join('');
+    const fullOtp = otp.join('');
+
     if (fullOtp.length < 6) {
-      setError("Tafadhali jaza namba zote 6 za OTP.");
+      setError('Tafadhali ingiza namba zote 6 za OTP.');
       return;
     }
 
-    setError('');
     setLoading(true);
+    setError('');
+
+    // Retrieve the user's password set during registration
+    const password = sessionStorage.getItem('pending_password') || '';
+
     try {
-      await verifyOtp(email, fullOtp);
-      // Clean redirect straight to the dedicated splash page
-      navigate('/welcome');
+      let response;
+      try {
+        response = await axios.post('http://127.0.0.1:8000/api/v1/auth/verify-otp/', {
+          email,
+          otp: fullOtp,
+          password,
+        });
+      } catch (firstErr) {
+        if (firstErr.response?.status === 404) {
+          response = await axios.post('http://127.0.0.1:8000/api/auth/verify-otp/', {
+            email,
+            otp: fullOtp,
+            password,
+          });
+        } else {
+          throw firstErr;
+        }
+      }
+
+      const { access_token, refresh_token, is_onboarded } = response.data;
+
+      // 1. SAVE ALL TOKEN FORMATS SO PROTECTED ROUTE NEVER KICKS YOU OUT
+      localStorage.setItem('token', access_token);
+      localStorage.setItem('access_token', access_token);
+      localStorage.setItem('accessToken', access_token);
+      localStorage.setItem('refresh_token', refresh_token);
+      if (response.data.user) {
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+      }
+
+      // 2. Clean temporary session credentials
+      sessionStorage.removeItem('pending_email');
+      sessionStorage.removeItem('pending_password');
+
+      // 3. HARD REDIRECT TO PREVENT BOUNCING BACK TO LOGIN
+      if (!is_onboarded) {
+        window.location.href = '/welcome';
+      } else {
+        window.location.href = '/app';
+      }
     } catch (err) {
-      setError(err.response?.data?.error || "Namba ya OTP siyo sahihi au imekwisha muda wake.");
+      console.error(err);
+      setError(err.response?.data?.error || 'Namba ya OTP siyo sahihi au imekwisha muda wake.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-slate-200 shadow-xl space-y-6 text-center animate-in fade-in duration-300">
+    <div className="min-h-screen bg-[#f3f5f9] flex items-center justify-center p-4">
+      <div className="w-full max-w-[440px] bg-white rounded-3xl p-8 sm:p-10 shadow-[0_10px_35px_rgba(0,0,0,0.04)] border border-slate-100 flex flex-col items-center">
         
-        <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 mx-auto flex items-center justify-center mb-1">
-          <ShieldCheck className="w-6 h-6" />
+        {/* Apple-style Blue Shield Badge */}
+        <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center mb-6">
+          <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            <path d="m9 12 2 2 4-4" />
+          </svg>
         </div>
 
-        <div className="space-y-1">
-          <h2 className="text-lg font-bold text-slate-900">Ingiza namba ya uhakiki (OTP)</h2>
-          <p className="text-xs text-slate-500">
-            Imetumwa kupitia terminal kwenda <span className="font-semibold text-slate-800">{email}</span>
-          </p>
-        </div>
+        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 text-center tracking-tight">
+          Ingiza namba ya uhakiki (OTP)
+        </h1>
+        <p className="text-sm text-slate-500 text-center mt-2">
+          Imetumwa kupitia terminal kwenda{' '}
+          <span className="font-semibold text-slate-800">{email || 'Barua pepe yako'}</span>
+        </p>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="flex justify-center gap-2">
-            {otpValues.map((digit, idx) => (
+        {error && (
+          <div className="w-full mt-4 p-3 bg-red-50 border border-red-200 text-red-600 text-xs text-center rounded-xl font-medium">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="w-full mt-8">
+          <div className="flex justify-between gap-2 sm:gap-2.5 mb-8" onPaste={handlePaste}>
+            {otp.map((digit, index) => (
               <input
-                key={idx}
-                ref={(el) => (inputRefs.current[idx] = el)}
+                key={index}
+                ref={(el) => (inputRefs.current[index] = el)}
                 type="text"
-                maxLength={1}
+                inputMode="numeric"
+                maxLength="1"
                 value={digit}
-                onChange={(e) => handleChange(idx, e.target.value)}
-                onKeyDown={(e) => handleKeyDown(idx, e.key)}
-                className="w-11 h-14 text-center text-xl font-bold rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white shadow-xs transition-all"
+                onChange={(e) => handleChange(index, e.target.value)}
+                onKeyDown={(e) => handleKeyDown(index, e)}
+                className="w-12 h-14 sm:w-14 sm:h-16 text-center text-xl sm:text-2xl font-semibold text-slate-900 bg-white border border-slate-300 rounded-2xl focus:border-blue-600 focus:ring-4 focus:ring-blue-50 outline-none transition-all"
               />
             ))}
           </div>
 
-          {error && (
-            <div className="flex items-start justify-center gap-1.5 text-xs text-rose-600 font-medium px-2 bg-rose-50 p-2.5 rounded-xl">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{error}</span>
-            </div>
-          )}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-2xl transition-all shadow-sm active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Inathibitisha...' : 'Endelea'}
+          </button>
 
-          <div className="space-y-2.5 pt-2">
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm transition-all cursor-pointer shadow-md disabled:opacity-50"
-            >
-              {loading ? 'Inahakiki...' : 'Endelea'}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => navigate('/login')}
-              className="w-full py-3 rounded-2xl bg-white border border-slate-300 text-slate-700 font-medium text-sm hover:bg-slate-50 transition-all cursor-pointer"
-            >
-              Rudi Nyuma
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/register')}
+            className="w-full py-3.5 mt-3 bg-white hover:bg-slate-50 text-slate-700 font-medium rounded-2xl border border-slate-200 transition-all active:scale-[0.99]"
+          >
+            Rudi Nyuma
+          </button>
         </form>
       </div>
     </div>

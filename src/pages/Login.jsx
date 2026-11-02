@@ -1,107 +1,167 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
-import { Mail, Lock, ArrowRight } from 'lucide-react';
+import axios from 'axios';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [formData, setFormData] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  const { login } = useAuth();
   const navigate = useNavigate();
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleGoogleLogin = () => {
+    alert('Google login inatayarishwa...');
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!email || !password) {
-      setError('Ingiza barua pepe na neno la siri kununua/kuingia');
-      return;
-    }
-
-    setError('');
     setLoading(true);
+    setError('');
+
+    const trimmedData = {
+      email: formData.email.trim(),
+      password: formData.password,
+    };
+
     try {
-      // Direct login without OTP requirement
-      await login(email, password);
-      navigate('/welcome');
+      let response;
+      try {
+        response = await axios.post('http://127.0.0.1:8000/api/v1/auth/login/', trimmedData);
+      } catch (firstErr) {
+        if (firstErr.response?.status === 404) {
+          response = await axios.post('http://127.0.0.1:8000/api/auth/login/', trimmedData);
+        } else {
+          throw firstErr;
+        }
+      }
+
+      const { access_token, refresh_token, is_onboarded } = response.data;
+
+      // Save tokens & user data
+      localStorage.setItem('access_token', access_token);
+      localStorage.setItem('token', access_token);
+      localStorage.setItem('refresh_token', refresh_token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+
+      // Intelligent routing: if already finished onboarding, straight to /app!
+      if (!is_onboarded) {
+        window.location.href = '/welcome';
+      } else {
+        window.location.href = '/app';
+      }
     } catch (err) {
-      setError(err.response?.data?.error || 'Barua pepe au neno la siri siyo sahihi');
+      console.error(err);
+      setError(err.response?.data?.error || 'Barua pepe au nenosiri si sahihi.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSocialLogin = () => {
-    // Quick social sign-in bypasses OTP straight to splash screen
-    navigate('/welcome');
-  };
-
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-slate-200 shadow-xl space-y-6 text-center">
+    <div className="min-h-screen bg-white flex flex-col justify-center items-center px-6 py-12 selection:bg-slate-100">
+      <div className="w-full max-w-[340px] sm:max-w-[360px] flex flex-col">
         
-        <div className="space-y-1">
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Duka Pooa POS</h1>
-          <p className="text-xs text-slate-500">Ingiza barua pepe na neno la siri kuingia</p>
-        </div>
+        {/* Title */}
+        <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight mb-8">
+          Sign in
+        </h1>
 
         {error && (
-          <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-medium">
+          <div className="mb-4 p-3.5 bg-red-50 border border-red-200 text-red-600 text-xs rounded-2xl text-center font-medium">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-3.5 text-left">
-          <div className="relative">
-            <Mail className="w-4 h-4 absolute left-4 top-3.5 text-slate-400" />
+        {/* Google Login Button */}
+        <button
+          type="button"
+          onClick={handleGoogleLogin}
+          className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold rounded-full border border-slate-300 flex items-center justify-center gap-3 transition-all active:scale-[0.99] shadow-sm mb-3"
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24">
+            <path
+              fill="#4285F4"
+              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+            />
+            <path
+              fill="#34A853"
+              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+            />
+            <path
+              fill="#FBBC05"
+              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+            />
+            <path
+              fill="#EA4335"
+              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+            />
+          </svg>
+          Continue with Google
+        </button>
+
+        {/* Divider */}
+        <div className="flex items-center my-3">
+          <div className="flex-1 h-[1px] bg-slate-200"></div>
+          <span className="px-3 text-xs text-slate-500 font-medium">or</span>
+          <div className="flex-1 h-[1px] bg-slate-200"></div>
+        </div>
+
+        {/* Form with Explicit Dark Text & Visible Caret */}
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
             <input
-              type="email"
+              type="text"
+              name="email"
+              autoComplete="email"
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="barua-pepe@mfano.com"
-              className="w-full pl-11 pr-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-xs focus:outline-none focus:border-blue-500 font-medium"
+              placeholder="Barua pepe au jina la mtumiaji"
+              value={formData.email}
+              onChange={handleChange}
+              className="w-full px-4 py-2.5 text-sm text-slate-900 bg-white border border-slate-300 rounded-full focus:border-black focus:ring-1 focus:ring-black outline-none transition-all placeholder:text-slate-400 caret-black shadow-xs"
             />
           </div>
 
-          <div className="relative">
-            <Lock className="w-4 h-4 absolute left-4 top-3.5 text-slate-400" />
+          <div>
             <input
               type="password"
+              name="password"
+              autoComplete="current-password"
               required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Neno la siri"
-              className="w-full pl-11 pr-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-900 text-xs focus:outline-none focus:border-blue-500 font-medium"
+              placeholder="Nenosiri (Password)"
+              value={formData.password}
+              onChange={handleChange}
+              className="w-full px-4 py-2.5 text-sm text-slate-900 bg-white border border-slate-300 rounded-full focus:border-black focus:ring-1 focus:ring-black outline-none transition-all placeholder:text-slate-400 caret-black shadow-xs"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-xs transition-all cursor-pointer shadow-md flex items-center justify-center gap-1.5 disabled:opacity-50"
+            className="w-full py-2.5 px-4 bg-black hover:bg-slate-900 text-white text-sm font-semibold rounded-full transition-all active:scale-[0.99] disabled:opacity-60 shadow-sm"
           >
-            {loading ? 'Inaingia...' : 'Ingia Mfumoni'} <ArrowRight className="w-4 h-4" />
+            {loading ? 'Inaingia...' : 'Sign in'}
           </button>
         </form>
 
-        <div className="relative flex py-1 items-center">
-          <div className="flex-grow border-t border-slate-200"></div>
-          <span className="shrink mx-3 text-[11px] text-slate-400 font-medium">au ingia na</span>
-          <div className="flex-grow border-t border-slate-200"></div>
-        </div>
+        {/* Don't have an account */}
+        <div className="mt-12">
+          <h3 className="text-sm font-normal text-slate-600 mb-3">
+            Don't have an account?
+          </h3>
 
-        <div className="grid grid-cols-3 gap-2">
-          <button onClick={handleSocialLogin} type="button" className="py-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 font-semibold text-xs text-slate-700">Google</button>
-          <button onClick={handleSocialLogin} type="button" className="py-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 font-semibold text-xs text-slate-700">Apple</button>
-          <button onClick={handleSocialLogin} type="button" className="py-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 font-semibold text-xs text-slate-700">Microsoft</button>
-        </div>
-
-        <div className="pt-2 text-xs text-slate-500">
-          Huna akaunti?{' '}
-          <button onClick={() => navigate('/register')} className="font-bold text-blue-600 hover:underline cursor-pointer">
-            Fungua akaunti hapa
+          <button
+            type="button"
+            onClick={() => navigate('/register')}
+            className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-blue-600 text-sm font-semibold rounded-full border border-slate-300 transition-all active:scale-[0.99]"
+          >
+            Sign up
           </button>
         </div>
 

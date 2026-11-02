@@ -1,49 +1,36 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export default function WelcomeSplash() {
   const navigate = useNavigate();
 
-  useEffect(() => {
-    // Hold the splash screen for 3.5 seconds then navigate to dashboard
-    const timer = setTimeout(() => {
-      navigate('/app');
-    }, 3500);
-
-    return () => clearTimeout(timer);
-  }, [navigate]);
-
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-slate-200 shadow-xl text-center space-y-6 animate-in fade-in zoom-in duration-500">
+    <div className="min-h-screen bg-[#f3f5f9] flex items-center justify-center p-4">
+      <div className="w-full max-w-[440px] bg-white rounded-3xl p-8 sm:p-10 shadow-[0_10px_35px_rgba(0,0,0,0.04)] border border-slate-100 flex flex-col items-center text-center">
         
-        {/* LOGO CONTAINER */}
-        <div className="relative pt-2">
-          <div className="absolute inset-0 bg-blue-500/10 blur-2xl rounded-full animate-pulse"></div>
-          
-          <div className="w-20 h-20 rounded-2xl bg-blue-50 border border-blue-100 mx-auto flex items-center justify-center relative z-10 shadow-md animate-bounce">
-            <span className="text-2xl font-black text-blue-600 tracking-tighter">DP</span>
-            {/* If using an image file, uncomment below: */}
-            {/* <img src="/logo.png" alt="Duka Pooa Logo" className="w-12 h-12 object-contain" /> */}
-          </div>
+        {/* Apple-style Blue Icon Badge */}
+        <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center mb-6 shadow-sm">
+          <span className="text-3xl">🏪</span>
         </div>
 
-        <div className="space-y-2">
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Karibu Duka Pooa! 🎉</h2>
-          <p className="text-xs text-slate-500 font-medium">Uhakiki umekamilika. Tunapakia mfumo wako...</p>
-        </div>
+        {/* Title */}
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+          Karibu Duka Poa!
+        </h1>
 
-        {/* 3.5-second Progress Bar & Spinner */}
-        <div className="space-y-2 pt-2">
-          <div className="flex justify-center">
-            <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-          <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-            <div 
-              className="bg-blue-600 h-full rounded-full transition-all duration-[3500ms] ease-out" 
-              style={{ width: '100%' }}
-            ></div>
-          </div>
+        {/* Description */}
+        <p className="text-sm text-slate-500 mt-3 leading-relaxed">
+          Mfumo wa kisasa wa kusimamia mauzo, stoo, madeni na faida ya duka lako kwa urahisi popote ulipo.
+        </p>
+
+        {/* Action Button */}
+        <div className="w-full mt-8">
+          <button
+            onClick={() => navigate('/onboarding/splash')}
+            className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-2xl transition-all shadow-sm active:scale-[0.99]"
+          >
+            Weka Taarifa za Biashara ➔
+          </button>
         </div>
 
       </div>
