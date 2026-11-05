@@ -6,59 +6,90 @@ import {
   ArrowUpRight, 
   Plus, 
   RefreshCw, 
-  Package, 
-  Users, 
-  Receipt 
+  Receipt,
+  Sparkles,
+  Calendar
 } from 'lucide-react';
 
 export default function Overview() {
   const navigate = useNavigate();
-  const [data, setData] = useState(null);
+  const [period, setPeriod] = useState('daily'); // 'daily', 'weekly', 'monthly', 'yearly'
+  const [data, setData] = useState({
+    period: 'Leo (Today)',
+    ticker_timeframe: '1H',
+    net_worth: 0,
+    today_sales: 0,
+    today_profit: 0,
+    today_tx_count: 0,
+    today_debt: 0,
+    low_stock_count: 0,
+    hourly_trend: []
+  });
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchLiveMetrics = async () => {
+  const fetchLiveMetrics = async (selectedPeriod = period) => {
     setRefreshing(true);
-    const token = localStorage.getItem('access_token') || localStorage.getItem('token');
     try {
-      const res = await axios.get('http://127.0.0.1:8000/api/v1/analytics/economics/', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setData(res.data);
+      const res = await axios.get(`http://127.0.0.1:8000/api/v1/analytics/economics/?period=${selectedPeriod}`);
+      if (res.data) {
+        setData(res.data);
+      }
     } catch (err) {
-      console.warn('Real Django metrics fetch note:', err);
+      console.warn('Live metrics fetch note:', err);
     } finally {
       setRefreshing(false);
     }
   };
 
   useEffect(() => {
-    fetchLiveMetrics();
-  }, []);
+    fetchLiveMetrics(period);
+  }, [period]);
+
+  const handlePeriodChange = (newPeriod) => {
+    setPeriod(newPeriod);
+    fetchLiveMetrics(newPeriod);
+  };
+
+  const timeOptions = [
+    { id: 'daily', label: 'Leo (1D)', desc: 'Masaa ya leo' },
+    { id: 'weekly', label: 'Wiki (7D)', desc: 'Siku 7 zilizopita' },
+    { id: 'monthly', label: 'Mwezi (30D)', desc: 'Mwezi huu' },
+    { id: 'yearly', label: 'Mwaka (1Y)', desc: 'Miezi yote ya mwaka' },
+  ];
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 select-none font-sans">
+    <div className="max-w-5xl mx-auto space-y-6 select-none font-sans pb-36">
       
-      {/* Clean Glass Action Header */}
-      <div className="bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl p-5 rounded-[28px] border border-slate-200/80 dark:border-slate-800 shadow-[0_8px_30px_rgba(0,0,0,0.02)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            Rekodi za Leo (Today)
+      {/* 
+        ========================================================================
+        TOP EXECUTIVE NET WORTH HERO CARD
+        ========================================================================
+      */}
+      <div className="relative overflow-hidden p-6 sm:p-8 rounded-[32px] bg-gradient-to-br from-white/95 via-white/85 to-blue-50/40 dark:from-[#151c28]/95 dark:via-[#111722]/90 dark:to-blue-950/20 backdrop-blur-3xl border border-white/80 dark:border-slate-800 shadow-[0_12px_36px_rgba(0,0,0,0.03)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 transition-all">
+        <div className="space-y-1.5 relative z-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950/50 border border-blue-200/80 dark:border-blue-900/50 text-[11px] font-black tracking-wider uppercase text-blue-700 dark:text-blue-300 mb-1">
+            <Sparkles className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
+            Thamani Halisi ya Biashara (Net Worth)
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-            Muhtasari wa Mauzo
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Mwenendo wa mauzo na bidhaa za duka moja kwa moja kutoka database
+
+          <p className="text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400">
+            Thamani halisi ya duka lako kwa sasa ni:
+          </p>
+
+          <h2 className="text-3xl sm:text-5xl font-black text-slate-900 dark:text-white tracking-tight">
+            TZS {data.net_worth?.toLocaleString() || 0}
+          </h2>
+
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium pt-1">
+            Inajumuisha thamani ya bidhaa zote stoo, mauzo yaliyokusanywa na madeni ya wateja unayodai.
           </p>
         </div>
 
-        {/* Clean Positioned Action Buttons */}
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 relative z-10">
           <button
-            onClick={fetchLiveMetrics}
+            onClick={() => fetchLiveMetrics(period)}
             disabled={refreshing}
-            className="p-3 rounded-full bg-slate-100/80 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-all active:scale-95 cursor-pointer"
+            className="p-3.5 rounded-full bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 transition-all cursor-pointer shadow-xs active:scale-95"
             title="Sasisha Takwimu"
           >
             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-blue-500' : ''}`} />
@@ -66,49 +97,45 @@ export default function Overview() {
 
           <button
             onClick={() => navigate('/app/pos')}
-            className="py-3 px-6 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs flex items-center gap-2 shadow-sm transition-all active:scale-95 cursor-pointer"
+            className="py-3 px-6 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs flex items-center gap-2 shadow-sm active:scale-95 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" /> Fungua POS
           </button>
         </div>
       </div>
 
-      {/* Titanium Grey KPI Cards */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        
-        {/* Mauzo ya Leo */}
         <div className="p-5 rounded-[24px] bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl border border-slate-200/80 dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
           <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-            Mauzo Yaliyorekodiwa
+            Mauzo ({data.period || 'Leo'})
           </p>
           <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">
-            TZS {data?.today_sales?.toLocaleString() || 0}
+            TZS {data.today_sales?.toLocaleString() || 0}
           </h3>
           <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 mt-2 inline-flex items-center gap-1">
-            <Receipt className="w-3 h-3" /> {data?.today_tx_count || 0} Risiti Zilizotoka
+            <Receipt className="w-3 h-3" /> {data.today_tx_count || 0} Risiti
           </span>
         </div>
 
-        {/* Faida ya Mauzo */}
         <div className="p-5 rounded-[24px] bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl border border-slate-200/80 dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
           <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
             Makadirio ya Faida
           </p>
           <h3 className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
-            TZS {data?.today_profit?.toLocaleString() || 0}
+            TZS {data.today_profit?.toLocaleString() || 0}
           </h3>
           <span className="text-[10px] font-bold text-slate-400 mt-2 block">
-            ~22% ya mauzo
+            ~22% Faida Halisi
           </span>
         </div>
 
-        {/* Madeni ya Wateja */}
         <div className="p-5 rounded-[24px] bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl border border-slate-200/80 dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
           <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
             Madeni ya Wateja
           </p>
-          <h3 className="text-xl sm:text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">
-            TZS {data?.today_debt?.toLocaleString() || 0}
+          <h3 className="text-xl sm:text-2xl font-black text-amber-500 mt-1">
+            TZS {data.today_debt?.toLocaleString() || 0}
           </h3>
           <button 
             onClick={() => navigate('/app/customers')}
@@ -118,13 +145,12 @@ export default function Overview() {
           </button>
         </div>
 
-        {/* Stock Alert */}
         <div className="p-5 rounded-[24px] bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl border border-slate-200/80 dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
           <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
             Tahadhari ya Stoo
           </p>
           <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">
-            {data?.low_stock_count || 0} Bidhaa
+            {data.low_stock_count || 0} Bidhaa
           </h3>
           <button 
             onClick={() => navigate('/app/products')}
@@ -133,40 +159,52 @@ export default function Overview() {
             Angalia Stock ➔
           </button>
         </div>
-
       </div>
 
-      {/* Real SVG Curve Container */}
-      <div className="bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl p-6 sm:p-7 rounded-[28px] border border-slate-200/80 dark:border-slate-800 shadow-[0_8px_30px_rgba(0,0,0,0.02)] space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800/80 pb-3">
+      {/* 
+        ========================================================================
+        FOREX CHART CARD WITH TIMEFRAME PILL SWITCHER
+        ========================================================================
+      */}
+      <div className="bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl p-5 sm:p-7 rounded-[28px] border border-slate-200/80 dark:border-slate-800 shadow-[0_8px_30px_rgba(0,0,0,0.02)] space-y-4">
+        
+        {/* Header with Switcher */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800/80 pb-4">
           <div>
             <h2 className="text-base font-black text-slate-900 dark:text-white tracking-tight">
-              Mwelekeo wa Mauzo na Faida (Leo)
+              Mwelekeo wa Mauzo na Faida ({data.period})
             </h2>
-            <p className="text-xs text-slate-400">
-              Ulinganisho halisi wa kiasi kilichorekodiwa kwa masaa ya leo
+            <p className="text-xs text-slate-400 mt-0.5">
+              Ulinganisho halisi wa kiasi kilichorekodiwa kulingana na muda uliouchagua
             </p>
           </div>
 
-          <div className="flex items-center gap-4 text-xs font-bold">
-            <span className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Mauzo
-            </span>
-            <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Faida
-            </span>
+          {/* Liquid Glass Timeframe Switcher (Daily / Weekly / Monthly / Yearly) */}
+          <div className="inline-flex p-1 rounded-full bg-slate-100 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700 self-start sm:self-auto">
+            {timeOptions.map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => handlePeriodChange(opt.id)}
+                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                  period === opt.id
+                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-950 shadow-sm scale-102'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
         </div>
 
+        {/* Forex Candlestick + Profit Growth Component */}
         <div className="pt-2">
-          {data?.hourly_trend ? (
-            <SalesProfitCurve data={data.hourly_trend} />
-          ) : (
-            <div className="h-44 flex items-center justify-center text-xs text-slate-400">
-              Inasawazisha na seva ya Django...
-            </div>
-          )}
+          <SalesProfitCurve 
+            data={data.hourly_trend} 
+            timeframe={data.ticker_timeframe} 
+          />
         </div>
+
       </div>
 
     </div>

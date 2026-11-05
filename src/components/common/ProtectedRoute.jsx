@@ -1,18 +1,20 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
-import SplashScreen from '../common/SplashScreen';
+import { Navigate, useLocation } from 'react-router-dom';
 
 export default function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth();
+  const location = useLocation();
 
-  if (loading) {
-    return <SplashScreen message="Inathibitisha akaunti yako..." />;
+  // 1. Check all token formats stored in localStorage
+  const token =
+    localStorage.getItem('access_token') ||
+    localStorage.getItem('token') ||
+    localStorage.getItem('accessToken');
+
+  // 2. If no token at all, only then redirect to login
+  if (!token) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
+  // 3. Token exists -> Allow direct access into Overview and Dashboard!
   return children;
 }

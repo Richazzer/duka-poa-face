@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 
 export default function Login() {
@@ -42,30 +42,30 @@ export default function Login() {
         }
       }
 
-      const { access_token, refresh_token, is_onboarded } = response.data;
+      const { access_token, refresh_token, user } = response.data;
 
-      // Save tokens & user data
+      // 1. SAVE ALL TOKEN KEYS SO PROTECTED ROUTE NEVER REJECTS YOU
       localStorage.setItem('access_token', access_token);
       localStorage.setItem('token', access_token);
+      localStorage.setItem('accessToken', access_token);
       localStorage.setItem('refresh_token', refresh_token);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
-
-      // Intelligent routing: if already finished onboarding, straight to /app!
-      if (!is_onboarded) {
-        window.location.href = '/welcome';
-      } else {
-        window.location.href = '/app';
+      localStorage.setItem('is_onboarded', 'true');
+      if (user) {
+        localStorage.setItem('user', JSON.stringify(user));
       }
+
+      // 2. GO DIRECTLY TO OVERVIEW DASHBOARD (NO DETOURS!)
+      window.location.href = '/app';
+
     } catch (err) {
-      console.error(err);
+      console.error('Login error:', err);
       setError(err.response?.data?.error || 'Barua pepe au nenosiri si sahihi.');
-    } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col justify-center items-center px-6 py-12 selection:bg-slate-100">
+    <div className="min-h-screen bg-white flex flex-col justify-center items-center px-6 py-12 selection:bg-slate-100 font-sans">
       <div className="w-full max-w-[340px] sm:max-w-[360px] flex flex-col">
         
         {/* Title */}
@@ -74,7 +74,7 @@ export default function Login() {
         </h1>
 
         {error && (
-          <div className="mb-4 p-3.5 bg-red-50 border border-red-200 text-red-600 text-xs rounded-2xl text-center font-medium">
+          <div className="mb-4 p-3.5 bg-red-50 border border-red-200 text-red-600 text-xs rounded-2xl text-center font-bold">
             {error}
           </div>
         )}
@@ -83,7 +83,7 @@ export default function Login() {
         <button
           type="button"
           onClick={handleGoogleLogin}
-          className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold rounded-full border border-slate-300 flex items-center justify-center gap-3 transition-all active:scale-[0.99] shadow-sm mb-3"
+          className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold rounded-full border border-slate-300 flex items-center justify-center gap-3 transition-all active:scale-[0.99] shadow-sm mb-3 cursor-pointer"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24">
             <path
@@ -113,7 +113,7 @@ export default function Login() {
           <div className="flex-1 h-[1px] bg-slate-200"></div>
         </div>
 
-        {/* Form with Explicit Dark Text & Visible Caret */}
+        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <input
@@ -144,7 +144,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 px-4 bg-black hover:bg-slate-900 text-white text-sm font-semibold rounded-full transition-all active:scale-[0.99] disabled:opacity-60 shadow-sm"
+            className="w-full py-2.5 px-4 bg-black hover:bg-slate-900 text-white text-sm font-semibold rounded-full transition-all active:scale-[0.99] disabled:opacity-60 shadow-sm cursor-pointer"
           >
             {loading ? 'Inaingia...' : 'Sign in'}
           </button>
@@ -159,7 +159,7 @@ export default function Login() {
           <button
             type="button"
             onClick={() => navigate('/register')}
-            className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-blue-600 text-sm font-semibold rounded-full border border-slate-300 transition-all active:scale-[0.99]"
+            className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-blue-600 text-sm font-semibold rounded-full border border-slate-300 transition-all active:scale-[0.99] cursor-pointer"
           >
             Sign up
           </button>
