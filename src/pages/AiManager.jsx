@@ -1,215 +1,92 @@
-import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
-import { 
-  Sparkles, 
-  Send, 
-  TrendingUp, 
-  Package, 
-  Users, 
-  Lightbulb, 
-  User, 
-  ArrowUp,
-  CheckCircle2,
-  Wrench
-} from 'lucide-react';
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Sparkles, Bot, Clock, ArrowRight, ShieldCheck } from 'lucide-react';
 
 export default function AiManager() {
-  const [messages, setMessages] = useState([
-    {
-      id: 1,
-      sender: 'ai',
-      text: 'Habari! Mimi ni Meneja wako wa AI wa Duka Poa. Ninaunganishwa moja kwa moja na database yako ya Django. Unaweza kuniuliza kuhusu mauzo, au kuniagiza kubadilisha bei ya bidhaa, kuongeza stoo, au kusajili malipo ya deni!'
-    }
-  ]);
-  const [input, setInput] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const [liveInfo, setLiveInfo] = useState(null);
-  const messagesEndRef = useRef(null);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isTyping]);
-
-  const quickPrompts = [
-    { icon: TrendingUp, title: 'Mauzo ya Leo', prompt: 'Je, mauzo ya leo yanaendaje?' },
-    { icon: Package, title: 'Tahadhari ya Stoo', prompt: 'Ni bidhaa gani zinakaribia kuisha stoo?' },
-    { icon: Users, title: 'Daftari la Madeni', prompt: 'Ni wateja gani wanaodaiwa zaidi dukani?' },
-    { icon: Wrench, title: 'Agiza AI Kubadili Data', prompt: 'Ongeza bei ya unga iwe 4000' }
-  ];
-
-  // REAL LIVE API CALL TO DJANGO GEMINI ENDPOINT
-  const handleSendMessage = async (textToSend = input) => {
-    const text = textToSend.trim();
-    if (!text) return;
-
-    // 1. Show user message
-    const userMsg = { id: Date.now(), sender: 'user', text };
-    setMessages((prev) => [...prev, userMsg]);
-    setInput('');
-    setIsTyping(true);
-
-    try {
-      // 2. Call Django AI Endpoint
-      const res = await axios.post('http://127.0.0.1:8000/api/v1/ai/chat/', {
-        message: text
-      });
-
-      const { reply, action_performed, live_metrics } = res.data;
-      if (live_metrics) setLiveInfo(live_metrics);
-
-      // 3. Append AI response
-      const aiReply = {
-        id: Date.now() + 1,
-        sender: 'ai',
-        text: reply,
-        action: action_performed
-      };
-
-      setMessages((prev) => [...prev, aiReply]);
-    } catch (err) {
-      console.error('AI chat error:', err);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now() + 1,
-          sender: 'ai',
-          text: 'Samahani, kumetokea hitilafu ya mawasiliano na seva ya Django. Hakikisha runserver inafanya kazi.'
-        }
-      ]);
-    } finally {
-      setIsTyping(false);
-    }
-  };
+  const navigate = useNavigate();
 
   return (
-    <div className="max-w-4xl mx-auto flex flex-col font-sans select-none pb-44">
+    <div className="relative min-h-[calc(100vh-10rem)] max-w-4xl mx-auto flex items-center justify-center font-sans select-none pb-28">
       
-      {/* Header */}
-      <div className="pt-2 pb-6 space-y-2">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-900/50 text-[11px] font-bold text-blue-700 dark:text-blue-300">
-          <Sparkles className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
-          Live Connected • Gemini AI Agent
+      {/* 
+        ========================================================================
+        1. BACKGROUND BLURRED SKELETON PREVIEW (Faded & Frosted)
+        ========================================================================
+      */}
+      <div className="absolute inset-0 flex flex-col justify-between opacity-25 dark:opacity-20 blur-md pointer-events-none overflow-hidden select-none">
+        <div className="space-y-4 pt-4">
+          <div className="h-10 w-64 bg-slate-300 dark:bg-slate-700 rounded-full"></div>
+          <div className="h-6 w-96 bg-slate-200 dark:bg-slate-800 rounded-full"></div>
+          <div className="grid grid-cols-2 gap-3 pt-4">
+            <div className="h-24 bg-slate-200 dark:bg-slate-800 rounded-3xl"></div>
+            <div className="h-24 bg-slate-200 dark:bg-slate-800 rounded-3xl"></div>
+          </div>
         </div>
 
-        <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-500 dark:from-blue-400 dark:via-indigo-300 dark:to-purple-300">
-          Meneja wa Akili Mnemba (AI)
-        </h1>
-        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-          AI inayofuatilia kila muamala na yenye uwezo wa kurekebisha bei na stoo moja kwa moja.
-        </p>
-      </div>
-
-      {/* Suggestion Cards */}
-      {messages.length <= 1 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-          {quickPrompts.map((item, idx) => {
-            const Icon = item.icon;
-            return (
-              <div
-                key={idx}
-                onClick={() => handleSendMessage(item.prompt)}
-                className="group p-4 rounded-2xl bg-white/70 dark:bg-[#141a24]/70 backdrop-blur-2xl border border-slate-200/80 dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:border-blue-500/50 hover:scale-[1.01] transition-all cursor-pointer flex flex-col justify-between space-y-3"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-900 dark:text-white">
-                    {item.title}
-                  </span>
-                  <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-300 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                    <Icon className="w-4 h-4" />
-                  </div>
-                </div>
-
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                  "{item.prompt}"
-                </p>
-              </div>
-            );
-          })}
+        <div className="space-y-3 pb-8">
+          <div className="h-14 w-3/4 bg-slate-200 dark:bg-slate-800 rounded-3xl"></div>
+          <div className="h-14 w-1/2 bg-blue-400 rounded-3xl ml-auto"></div>
+          <div className="h-12 w-full bg-slate-300 dark:bg-slate-700 rounded-full mt-4"></div>
         </div>
-      )}
-
-      {/* Chat Messages */}
-      <div className="space-y-4">
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex items-start gap-3 ${
-              msg.sender === 'user' ? 'justify-end' : 'justify-start'
-            }`}
-          >
-            {msg.sender === 'ai' && (
-              <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm mt-1">
-                <Sparkles className="w-4 h-4" />
-              </div>
-            )}
-
-            <div
-              className={`max-w-[85%] sm:max-w-xl p-4 sm:p-5 rounded-[22px] text-xs sm:text-sm leading-relaxed ${
-                msg.sender === 'user'
-                  ? 'bg-blue-600 text-white font-medium rounded-tr-sm shadow-md'
-                  : 'bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl border border-slate-200/80 dark:border-slate-800 text-slate-900 dark:text-slate-100 rounded-tl-sm shadow-sm whitespace-pre-wrap'
-              }`}
-            >
-              {msg.text}
-
-              {/* Action Execution Pill Badge */}
-              {msg.action && (
-                <div className="mt-3 p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>{msg.action}</span>
-                </div>
-              )}
-            </div>
-
-            {msg.sender === 'user' && (
-              <div className="w-9 h-9 rounded-2xl bg-slate-900 dark:bg-slate-700 text-white flex items-center justify-center shrink-0 shadow-sm mt-1">
-                <User className="w-4 h-4" />
-              </div>
-            )}
-          </div>
-        ))}
-
-        {isTyping && (
-          <div className="flex items-center gap-3 justify-start">
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-              <Sparkles className="w-4 h-4 animate-spin" />
-            </div>
-            <div className="bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl border border-slate-200/80 dark:border-slate-800 p-4 rounded-[22px] flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-blue-500 animate-bounce"></span>
-              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-bounce [animation-delay:0.2s]"></span>
-              <span className="w-2 h-2 rounded-full bg-purple-500 animate-bounce [animation-delay:0.4s]"></span>
-            </div>
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
       </div>
 
-      {/* Floating Input Capsule */}
-      <div className="fixed bottom-24 inset-x-0 z-40 flex justify-center px-4 pointer-events-none">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSendMessage();
-          }}
-          className="pointer-events-auto w-full max-w-2xl bg-white/85 dark:bg-[#151c28]/90 backdrop-blur-3xl border border-white/80 dark:border-slate-700/80 rounded-full p-1.5 sm:p-2 shadow-[0_20px_50px_rgba(0,0,0,0.18)] flex items-center gap-2"
-        >
-          <input
-            type="text"
-            placeholder="Uliza au agiza: 'Weka bei ya unga iwe 3500' au 'Mauzo yakoje?'..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            className="flex-1 pl-4 pr-2 py-2 text-xs sm:text-sm bg-transparent text-slate-900 dark:text-white placeholder:text-slate-400 outline-none"
-          />
+      {/* 
+        ========================================================================
+        2. FLOATING LIQUID GLASS "COMING SOON" CARD
+        ========================================================================
+      */}
+      <div className="relative z-20 w-full max-w-md mx-4 p-8 sm:p-10 rounded-[32px] bg-white/80 dark:bg-[#151c28]/90 backdrop-blur-3xl border border-white/80 dark:border-slate-700/70 shadow-[0_25px_60px_rgba(0,0,0,0.2),inset_0_1px_2px_rgba(255,255,255,0.7)] flex flex-col items-center text-center space-y-5 animate-fadeIn">
+        
+        {/* Glowing Specular Badge */}
+        <div className="relative">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/25">
+            <Sparkles className="w-8 h-8 animate-pulse" />
+          </div>
+          <span className="absolute -top-1 -right-1 flex h-4 w-4">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-4 w-4 bg-blue-600"></span>
+          </span>
+        </div>
 
+        {/* Pulse Pill */}
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50 dark:bg-blue-950/50 border border-blue-200/80 dark:border-blue-900/50 text-[10px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-300">
+          <Clock className="w-3.5 h-3.5 text-blue-500" />
+          Inakuja Hivi Karibuni • Coming Soon
+        </div>
+
+        {/* Title */}
+        <div className="space-y-1.5">
+          <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+            Duka Poa AI Agent
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed max-w-xs mx-auto">
+            Tunaboresha injini ya akili mnemba ya kisasa zaidi ili iweze kuchambua mauzo yako na kutoa ushauri wa biashara kwa uhakika wa 100%.
+          </p>
+        </div>
+
+        {/* Feature Teasers */}
+        <div className="w-full pt-2 space-y-2 text-left">
+          <div className="flex items-center gap-2.5 text-xs text-slate-600 dark:text-slate-300 font-semibold p-2.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800">
+            <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span>Uchambuzi wa moja kwa moja wa faida na stoo</span>
+          </div>
+
+          <div className="flex items-center gap-2.5 text-xs text-slate-600 dark:text-slate-300 font-semibold p-2.5 rounded-2xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800">
+            <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+            <span>Kurekebisha bei na stoo kwa sauti au maagizo</span>
+          </div>
+        </div>
+
+        {/* Action Button: Takes user back to Overview */}
+        <div className="w-full pt-2">
           <button
-            type="submit"
-            disabled={!input.trim()}
-            className="w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center shrink-0 disabled:opacity-40 transition-all shadow-md active:scale-95 cursor-pointer"
+            onClick={() => navigate('/app')}
+            className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs rounded-full flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-all cursor-pointer"
           >
-            <ArrowUp className="w-4 h-4 stroke-[2.5]" />
+            Rudi kwenye Muhtasari wa Duka <ArrowRight className="w-4 h-4" />
           </button>
-        </form>
+        </div>
+
       </div>
 
     </div>
