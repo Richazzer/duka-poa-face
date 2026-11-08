@@ -10,8 +10,50 @@ export default function Register() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
+  // Real Google Sign-in Handler
   const handleGoogleSignup = () => {
-    alert('Google OAuth inatayarishwa...');
+    if (!window.google) {
+      alert('Tafadhali subiri sekunde chache Google ipakie kisha jaribu tena.');
+      return;
+    }
+
+    const clientId = 
+      import.meta.env.VITE_GOOGLE_CLIENT_ID || 
+      'YOUR_CLIENT_ID_FROM_GOOGLE_CONSOLE.apps.googleusercontent.com';
+
+    window.google.accounts.id.initialize({
+      client_id: clientId,
+      callback: async (response) => {
+        setLoading(true);
+        try {
+          // Send Google token to your live Render backend
+          const res = await axios.post(`${API_BASE_URL}/api/v1/auth/google/`, {
+            credential: response.credential,
+          });
+
+          const { access_token, refresh_token, is_onboarded, user } = res.data;
+
+          localStorage.setItem('access_token', access_token);
+          localStorage.setItem('token', access_token);
+          localStorage.setItem('refresh_token', refresh_token);
+          localStorage.setItem('user', JSON.stringify(user));
+
+          // If new user -> welcome/onboarding; if existing -> app
+          if (!is_onboarded) {
+            window.location.href = '/welcome';
+          } else {
+            window.location.href = '/app';
+          }
+        } catch (err) {
+          console.error(err);
+          setError('Imeshindikana kuingia kupitia Google. Jaribu tena.');
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
+
+    window.google.accounts.id.prompt();
   };
 
   const handleEmailSubmit = async (e) => {
