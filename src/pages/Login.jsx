@@ -33,10 +33,10 @@ export default function Login() {
     try {
       let response;
       try {
-        response = await axios.post('http://127.0.0.1:8000/api/v1/auth/login/', trimmedData);
+        response = await axios.post('${API_BASE_URL}/api/v1/auth/login/', trimmedData);
       } catch (firstErr) {
         if (firstErr.response?.status === 404) {
-          response = await axios.post('http://127.0.0.1:8000/api/auth/login/', trimmedData);
+          response = await axios.post('${API_BASE_URL}/api/auth/login/', trimmedData);
         } else {
           throw firstErr;
         }
