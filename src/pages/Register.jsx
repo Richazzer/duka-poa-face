@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { API_BASE_URL } from '../config';
 
 export default function Register() {
   const [showEmailForm, setShowEmailForm] = useState(false);
@@ -10,8 +11,7 @@ export default function Register() {
   const navigate = useNavigate();
 
   const handleGoogleSignup = () => {
-    // Placeholder or integration for Google Auth
-    alert('Google sign-in inatayarishwa...');
+    alert('Google OAuth inatayarishwa...');
   };
 
   const handleEmailSubmit = async (e) => {
@@ -20,38 +20,29 @@ export default function Register() {
     setError('');
 
     try {
-      const endpoint = 'http://127.0.0.1:8000/api/v1/auth/send-otp/';
-      
-      try {
-        await axios.post(endpoint, { email: formData.email });
-      } catch (firstErr) {
-        if (firstErr.response?.status === 404) {
-          // Fallback to /api/ if needed
-          await axios.post('http://127.0.0.1:8000/api/auth/send-otp/', { email: formData.email });
-        } else {
-          throw firstErr;
-        }
-      }
+      // Calls your live Render backend
+      await axios.post(`${API_BASE_URL}/api/v1/auth/send-otp/`, {
+        email: formData.email.trim(),
+      });
 
-      // Temporarily store credentials for OTP step
-      sessionStorage.setItem('pending_email', formData.email);
+      // Save email and password for OTP verification step
+      sessionStorage.setItem('pending_email', formData.email.trim());
       sessionStorage.setItem('pending_password', formData.password);
 
-      // Navigate straight to the Apple-style OTP verification page
       navigate('/otp-verify');
     } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.error || 'Imeshindikana kutuma OTP. Tafadhali jaribu tena.');
+      console.error('OTP Send error:', err);
+      const msg = err.response?.data?.error || err.response?.data?.message;
+      setError(msg || 'Imeshindikana kutuma OTP. Tafadhali jaribu tena.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col justify-center items-center px-6 py-12 selection:bg-slate-100">
+    <div className="min-h-screen bg-white flex flex-col justify-center items-center px-6 py-12 selection:bg-slate-100 font-sans">
       <div className="w-full max-w-[340px] sm:max-w-[360px] flex flex-col">
         
-        {/* Main Apple / X style Headline */}
         <h1 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight leading-none mb-10">
           Happening now
         </h1>
@@ -61,16 +52,16 @@ export default function Register() {
         </h2>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-2xl text-center font-medium">
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-2xl text-center font-bold">
             {error}
           </div>
         )}
 
-        {/* 1. Continue with Google */}
+        {/* Continue with Google */}
         <button
           type="button"
           onClick={handleGoogleSignup}
-          className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold rounded-full border border-slate-300 flex items-center justify-center gap-3 transition-all active:scale-[0.99] shadow-sm mb-3"
+          className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold rounded-full border border-slate-300 flex items-center justify-center gap-3 transition-all active:scale-[0.99] shadow-sm mb-3 cursor-pointer"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24">
             <path
@@ -100,17 +91,17 @@ export default function Register() {
           <div className="flex-1 h-[1px] bg-slate-200"></div>
         </div>
 
-        {/* 2. Create Account with Email */}
+        {/* Create Account with Email */}
         {!showEmailForm ? (
           <button
             type="button"
             onClick={() => setShowEmailForm(true)}
-            className="w-full py-2.5 px-4 bg-black hover:bg-slate-900 text-white text-sm font-semibold rounded-full transition-all active:scale-[0.99] shadow-sm"
+            className="w-full py-2.5 px-4 bg-black hover:bg-slate-900 text-white text-sm font-semibold rounded-full transition-all active:scale-[0.99] shadow-sm cursor-pointer"
           >
             Create account
           </button>
         ) : (
-          <form onSubmit={handleEmailSubmit} className="space-y-3 mt-1 animate-fadeIn">
+          <form onSubmit={handleEmailSubmit} className="space-y-3 mt-1">
             <div>
               <input
                 type="email"
@@ -118,7 +109,7 @@ export default function Register() {
                 placeholder="Barua pepe (Email)"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full px-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-full focus:bg-white focus:border-black outline-none transition-all placeholder-slate-400"
+                className="w-full px-4 py-2.5 text-sm text-slate-900 bg-white border border-slate-300 rounded-full focus:border-black outline-none transition-all placeholder:text-slate-400 caret-black"
               />
             </div>
             <div>
@@ -128,28 +119,25 @@ export default function Register() {
                 placeholder="Weka Nenosiri (Password)"
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="w-full px-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-full focus:bg-white focus:border-black outline-none transition-all placeholder-slate-400"
+                className="w-full px-4 py-2.5 text-sm text-slate-900 bg-white border border-slate-300 rounded-full focus:border-black outline-none transition-all placeholder:text-slate-400 caret-black"
               />
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 px-4 bg-black hover:bg-slate-900 text-white text-sm font-semibold rounded-full transition-all active:scale-[0.99] disabled:opacity-60 shadow-sm"
+              className="w-full py-2.5 px-4 bg-black hover:bg-slate-900 text-white text-sm font-semibold rounded-full transition-all active:scale-[0.99] disabled:opacity-60 shadow-sm cursor-pointer"
             >
               {loading ? 'Inatuma OTP...' : 'Endelea na OTP ➔'}
             </button>
           </form>
         )}
 
-        {/* Legal Disclaimer */}
         <p className="text-[11px] text-slate-500 leading-tight mt-3">
           By signing up, you agree to the{' '}
           <span className="text-blue-600 hover:underline cursor-pointer">Terms of Service</span> and{' '}
-          <span className="text-blue-600 hover:underline cursor-pointer">Privacy Policy</span>, including{' '}
-          <span className="text-blue-600 hover:underline cursor-pointer">Cookie Use</span>.
+          <span className="text-blue-600 hover:underline cursor-pointer">Privacy Policy</span>.
         </p>
 
-        {/* 3. Already have an account section */}
         <div className="mt-12">
           <h3 className="text-base font-bold text-slate-900 mb-4">
             Already have an account?
@@ -158,7 +146,7 @@ export default function Register() {
           <button
             type="button"
             onClick={() => navigate('/login')}
-            className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-blue-600 text-sm font-semibold rounded-full border border-slate-300 transition-all active:scale-[0.99]"
+            className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-blue-600 text-sm font-semibold rounded-full border border-slate-300 transition-all active:scale-[0.99] cursor-pointer"
           >
             Sign in
           </button>
