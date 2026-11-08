@@ -40,9 +40,9 @@ export default function Register() {
 
           // If new user -> welcome/onboarding; if existing -> app
           if (!is_onboarded) {
-            window.location.href = '/welcome';
+            navigate('/welcome');
           } else {
-            window.location.href = '/app';
+            navigate('/app');
           }
         } catch (err) {
           console.error(err);
