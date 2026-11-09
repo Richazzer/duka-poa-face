@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import axios from 'axios';
+import { api, getErrorMessage } from '../api';
 import {
   Package,
   Plus,
@@ -15,17 +15,6 @@ import {
 } from 'lucide-react';
 import Modal from '../components/common/Modal';
 
-// =====================================================================
-// API CONFIG
-// Set VITE_API_URL in Vercel (e.g. https://your-backend.onrender.com)
-// Falls back to localhost only for local development.
-// =====================================================================
-const API_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
-
-const api = axios.create({
-  baseURL: `${API_URL}/api/v1`,
-  timeout: 60000 // Render free tier can take ~50s to wake up
-});
 
 const LOW_STOCK_LIMIT = 5;
 const EMPTY_FORM = { name: '', category: '', sellingPrice: '', stockQuantity: '' };
@@ -41,26 +30,6 @@ const extractList = (data) => {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.results)) return data.results;
   return [];
-};
-
-// Turns axios / DRF errors into a readable Swahili message
-const getErrorMessage = (err, fallback) => {
-  if (err?.code === 'ECONNABORTED') {
-    return 'Seva imechukua muda mrefu kujibu. Jaribu tena baada ya sekunde chache.';
-  }
-  if (!err?.response) {
-    return 'Hakuna mawasiliano na seva. Hakikisha una intaneti na seva iko wazi.';
-  }
-  const data = err.response.data;
-  if (data && typeof data === 'object') {
-    const first = Object.entries(data)[0];
-    if (first) {
-      const [field, msg] = first;
-      const text = Array.isArray(msg) ? msg[0] : typeof msg === 'string' ? msg : '';
-      if (text) return `${field}: ${text}`;
-    }
-  }
-  return fallback;
 };
 
 export default function ProductsStock() {
