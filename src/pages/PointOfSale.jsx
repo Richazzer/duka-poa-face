@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { api, getErrorMessage } from '../api';
+import { api, getErrorMessage } from '../services/api';
 import {
   Search,
   ShoppingCart,
