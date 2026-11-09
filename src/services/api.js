@@ -1,16 +1,18 @@
 import axios from 'axios';
 
 // =====================================================================
-// SHARED API CLIENT  (save as src/api.js)
+// SHARED API CLIENT  (save as src/services/api.js)
 // Used by Overview, PointOfSale, ProductsStock and every other screen.
 // =====================================================================
 // Your live backend. VITE_API_URL (Vercel env var) can override it, but it is not required.
 export const API_URL = (import.meta.env.VITE_API_URL || 'https://duka-poa.onrender.com').replace(/\/+$/, '');
 
-// The login screen may store tokens under different names, so we look for all the common ones
-// (in localStorage and sessionStorage). Put your own key first if you know it.
-const ACCESS_KEYS = ['access_token', 'access', 'token', 'accessToken', 'authToken', 'duka_access_token'];
-const REFRESH_KEYS = ['refresh_token', 'refresh', 'refreshToken', 'duka_refresh_token'];
+// =====================================================================
+// TOKEN LOOKUP
+// Finds the login token wherever your login screen saved it: any key name,
+// localStorage or sessionStorage, even inside a saved JSON object (Zustand/Redux persist).
+// =====================================================================
+const OWN_ACCESS_KEY = 'access_token'; // where a refreshed token is saved
 
 const stores = () => {
   try {
@@ -20,28 +22,66 @@ const stores = () => {
   }
 };
 
-// Finds a token and remembers where it was stored
-const findToken = (keys) => {
-  for (const store of stores()) {
-    for (const key of keys) {
+const JWT_PATTERN = /^eyJ[\w-]+\.[\w-]+\.[\w-]*$/;
+
+const decodeJwt = (token) => {
+  try {
+    let part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (part.length % 4) part += '=';
+    return JSON.parse(atob(part));
+  } catch {
+    return null;
+  }
+};
+
+// Walks strings, JSON text and objects, collecting every JWT inside
+const collectJwts = (value, out, depth = 0) => {
+  if (value == null || depth > 5) return;
+  if (typeof value === 'string') {
+    const clean = value.trim().replace(/^"|"$/g, '');
+    if (JWT_PATTERN.test(clean)) {
+      out.push(clean);
+    } else if (clean.startsWith('{') || clean.startsWith('[')) {
       try {
-        let value = store.getItem(key);
-        if (value) {
-          value = value.replace(/^"|"$/g, ''); // some apps save it as JSON text
-          if (value && value !== 'null' && value !== 'undefined') return { value, store, key };
-        }
+        collectJwts(JSON.parse(clean), out, depth + 1);
       } catch {
-        /* ignore */
+        /* not JSON */
       }
     }
+    return;
   }
-  return null;
+  if (typeof value === 'object') {
+    Object.values(value).forEach((v) => collectJwts(v, out, depth + 1));
+  }
+};
+
+// kind = 'access' | 'refresh'. Returns the newest matching token, or null.
+const findToken = (kind) => {
+  const found = [];
+  for (const store of stores()) {
+    try {
+      for (let i = 0; i < store.length; i += 1) {
+        collectJwts(store.getItem(store.key(i)), found);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const matches = found
+    .map((token) => ({ token, payload: decodeJwt(token) }))
+    .filter(({ payload }) => {
+      const type = payload?.token_type;
+      return kind === 'refresh' ? type === 'refresh' : type !== 'refresh';
+    })
+    .sort((a, b) => (b.payload?.exp || 0) - (a.payload?.exp || 0));
+
+  return matches[0]?.token || null;
 };
 
 const saveAccessToken = (value) => {
-  const found = findToken(ACCESS_KEYS);
   try {
-    (found?.store || window.localStorage).setItem(found?.key || ACCESS_KEYS[0], value);
+    window.localStorage.setItem(OWN_ACCESS_KEY, value);
   } catch {
     /* ignore */
   }
@@ -49,7 +89,7 @@ const saveAccessToken = (value) => {
 
 const clearTokens = () => {
   for (const store of stores()) {
-    for (const key of [...ACCESS_KEYS, ...REFRESH_KEYS]) {
+    for (const key of [OWN_ACCESS_KEY, 'access', 'token', 'accessToken', 'refresh_token', 'refresh', 'refreshToken']) {
       try {
         store.removeItem(key);
       } catch {
@@ -59,6 +99,23 @@ const clearTokens = () => {
   }
 };
 
+let warnedNoToken = false;
+const warnNoToken = () => {
+  if (warnedNoToken) return;
+  warnedNoToken = true;
+  const names = stores().map((s) => {
+    try {
+      return Array.from({ length: s.length }, (_, i) => s.key(i));
+    } catch {
+      return [];
+    }
+  });
+  console.warn('[duka api] No login token found. Storage keys (local, session):', names);
+};
+
+// =====================================================================
+// AXIOS INSTANCE
+// =====================================================================
 export const api = axios.create({
   baseURL: `${API_URL}/api/v1`,
   timeout: 60000 // Render free tier can take ~50s to wake up
@@ -66,8 +123,12 @@ export const api = axios.create({
 
 // 1. Send the logged-in user's token with every request
 api.interceptors.request.use((config) => {
-  const token = findToken(ACCESS_KEYS)?.value;
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  const token = findToken('access');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  } else {
+    warnNoToken();
+  }
   return config;
 });
 
@@ -75,7 +136,7 @@ api.interceptors.request.use((config) => {
 let refreshing = null;
 
 const refreshAccessToken = async () => {
-  const refresh = findToken(REFRESH_KEYS)?.value;
+  const refresh = findToken('refresh');
   if (!refresh) throw new Error('No refresh token');
   const res = await axios.post(`${API_URL}/api/v1/auth/refresh/`, { refresh_token: refresh });
   saveAccessToken(res.data.access_token);
@@ -129,3 +190,6 @@ export const getErrorMessage = (err, fallback) => {
   }
   return fallback;
 };
+
+// Keeps older screens that use `import api from '../services/api'` working
+export default api;
