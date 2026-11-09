@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
+import { api, getErrorMessage } from '../api';
 import { useNavigate } from 'react-router-dom';
 import SalesProfitCurve from '../components/charts/SalesProfitCurve';
 import {
@@ -10,17 +11,6 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
-// =====================================================================
-// API CONFIG
-// Set VITE_API_URL in Vercel (e.g. https://your-backend.onrender.com)
-// Falls back to localhost only for local development.
-// =====================================================================
-const API_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
-
-const api = axios.create({
-  baseURL: `${API_URL}/api/v1`,
-  timeout: 60000 // Render free tier can take ~50s to wake up
-});
 
 // =====================================================================
 // CONSTANTS
@@ -104,6 +94,15 @@ const writeCache = (period, data) => {
   safeSet(CACHE_KEY, JSON.stringify(map));
 };
 
+// Lets the server group sales by the shop's own local day (any country / timezone)
+const getTimeZone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return undefined;
+  }
+};
+
 const money = (v) => (Number(v) || 0).toLocaleString();
 
 const formatTime = (ts) => {
@@ -157,7 +156,7 @@ export default function Overview() {
 
     try {
       const res = await api.get('/analytics/economics/', {
-        params: { period: selectedPeriod },
+        params: { period: selectedPeriod, tz: getTimeZone() },
         signal: controller.signal
       });
 
@@ -174,11 +173,7 @@ export default function Overview() {
       if (axios.isCancel(err)) return;
       if (!mountedRef.current || requestId !== requestIdRef.current) return;
       console.warn('Live metrics fetch error:', err);
-      setError(
-        err?.code === 'ECONNABORTED'
-          ? 'Seva imechukua muda mrefu kujibu.'
-          : 'Imeshindikana kusasisha takwimu.'
-      );
+      setError(getErrorMessage(err, 'Imeshindikana kusasisha takwimu.'));
     } finally {
       if (mountedRef.current && requestId === requestIdRef.current) {
         setRefreshing(false);
