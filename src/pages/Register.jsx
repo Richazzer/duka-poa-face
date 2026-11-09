@@ -55,7 +55,7 @@ export default function Register() {
     const cleanEmail = formData.email.trim();
 
     try {
-      await axios.post(`${API_BASE_URL}/api/v1/auth/send-otp/`, {
+      const response = await axios.post(`${API_BASE_URL}/api/v1/auth/send-otp/`, {
         email: cleanEmail,
       });
 
@@ -64,8 +64,15 @@ export default function Register() {
 
       navigate('/otp-verify');
     } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.error || 'Imeshindikana kutuma OTP. Tafadhali jaribu tena.');
+      console.error('OTP Send error:', err.response || err);
+      // Reveals the EXACT error: e.g. Network Error, 500, or specific message
+      const serverMsg = 
+        err.response?.data?.error || 
+        err.response?.data?.message || 
+        (err.response?.data ? JSON.stringify(err.response.data) : null) || 
+        err.message;
+        
+      setError(serverMsg || 'Imeshindikana kutuma OTP. Tafadhali jaribu tena.');
     } finally {
       setLoading(false);
     }
