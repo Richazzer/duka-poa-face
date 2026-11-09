@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Sparkles, ArrowRight, ArrowLeft, Send, Check, X, Loader2, AlertCircle } from 'lucide-react';
 
 // ADAPT: base URL and token key to match the rest of your app
-const API_BASE = (import.meta.env && import.meta.env.VITE_API_URL) || '/api';
+const API_BASE = (import.meta.env && import.meta.env.VITE_API_URL) || 'https://duka-poa.onrender.com/api/v1';
 const getToken = () => localStorage.getItem('access_token');
 
 async function authPost(path, body) {
