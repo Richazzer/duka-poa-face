@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
+import { API_BASE_URL } from '../config';
 
 export default function Login() {
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -9,57 +10,73 @@ export default function Login() {
   const navigate = useNavigate();
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  // Google Sign-In: DIRECT LOGIN (NO OTP)
   const handleGoogleLogin = () => {
-    alert('Google login inatayarishwa...');
+    if (!window.google) {
+      alert('Tafadhali subiri sekunde chache Google ipakie kisha jaribu tena.');
+      return;
+    }
+
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '825907989396-placeholder.apps.googleusercontent.com';
+
+    window.google.accounts.id.initialize({
+      client_id: clientId,
+      callback: async (response) => {
+        setLoading(true);
+        try {
+          const res = await axios.post(`${API_BASE_URL}/api/v1/auth/google/`, {
+            credential: response.credential,
+            mode: 'login' // Signals DIRECT LOGIN, NO OTP!
+          });
+
+          const { access_token, refresh_token, user } = res.data;
+          localStorage.setItem('access_token', access_token);
+          localStorage.setItem('token', access_token);
+          localStorage.setItem('refresh_token', refresh_token);
+          localStorage.setItem('is_onboarded', 'true');
+          if (user) localStorage.setItem('user', JSON.stringify(user));
+
+          // Direct entry to Overview
+          navigate('/app');
+        } catch (err) {
+          setError('Imeshindikana kuingia na Google. Jaribu tena.');
+        } finally {
+          setLoading(false);
+        }
+      }
+    });
+
+    window.google.accounts.id.prompt();
   };
 
+  // Email / Password Login: DIRECT LOGIN (NO OTP)
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    const trimmedData = {
-      email: formData.email.trim(),
-      password: formData.password,
-    };
-
     try {
-      let response;
-      try {
-        response = await axios.post('${API_BASE_URL}/api/v1/auth/login/', trimmedData);
-      } catch (firstErr) {
-        if (firstErr.response?.status === 404) {
-          response = await axios.post('${API_BASE_URL}/api/auth/login/', trimmedData);
-        } else {
-          throw firstErr;
-        }
-      }
+      const res = await axios.post(`${API_BASE_URL}/api/v1/auth/login/`, {
+        email: formData.email.trim(),
+        password: formData.password
+      });
 
-      const { access_token, refresh_token, user } = response.data;
-
-      // 1. SAVE ALL TOKEN KEYS SO PROTECTED ROUTE NEVER REJECTS YOU
+      const { access_token, refresh_token, user } = res.data;
       localStorage.setItem('access_token', access_token);
       localStorage.setItem('token', access_token);
-      localStorage.setItem('accessToken', access_token);
       localStorage.setItem('refresh_token', refresh_token);
       localStorage.setItem('is_onboarded', 'true');
-      if (user) {
-        localStorage.setItem('user', JSON.stringify(user));
-      }
+      if (user) localStorage.setItem('user', JSON.stringify(user));
 
-      // 2. GO DIRECTLY TO OVERVIEW DASHBOARD (NO DETOURS!)
-      window.location.href = '/app';
-
+      // Direct entry to Overview
+      navigate('/app');
     } catch (err) {
-      console.error('Login error:', err);
-      setError(err.response?.data?.error || 'Barua pepe au nenosiri si sahihi.');
+      console.error(err);
+      setError(err.response?.data?.error || 'Nenosiri au barua pepe si sahihi.');
+    } finally {
       setLoading(false);
     }
   };
@@ -68,7 +85,6 @@ export default function Login() {
     <div className="min-h-screen bg-white flex flex-col justify-center items-center px-6 py-12 selection:bg-slate-100 font-sans">
       <div className="w-full max-w-[340px] sm:max-w-[360px] flex flex-col">
         
-        {/* Title */}
         <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight mb-8">
           Sign in
         </h1>
@@ -79,29 +95,17 @@ export default function Login() {
           </div>
         )}
 
-        {/* Google Login Button */}
+        {/* Continue with Google */}
         <button
           type="button"
           onClick={handleGoogleLogin}
           className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold rounded-full border border-slate-300 flex items-center justify-center gap-3 transition-all active:scale-[0.99] shadow-sm mb-3 cursor-pointer"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24">
-            <path
-              fill="#4285F4"
-              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-            />
-            <path
-              fill="#34A853"
-              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-            />
-            <path
-              fill="#FBBC05"
-              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-            />
-            <path
-              fill="#EA4335"
-              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-            />
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
           </svg>
           Continue with Google
         </button>
@@ -113,7 +117,7 @@ export default function Login() {
           <div className="flex-1 h-[1px] bg-slate-200"></div>
         </div>
 
-        {/* Form */}
+        {/* Login Form */}
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
             <input
@@ -124,7 +128,7 @@ export default function Login() {
               placeholder="Barua pepe au jina la mtumiaji"
               value={formData.email}
               onChange={handleChange}
-              className="w-full px-4 py-2.5 text-sm text-slate-900 bg-white border border-slate-300 rounded-full focus:border-black focus:ring-1 focus:ring-black outline-none transition-all placeholder:text-slate-400 caret-black shadow-xs"
+              className="w-full px-4 py-2.5 text-sm text-slate-900 bg-white border border-slate-300 rounded-full focus:border-black outline-none transition-all placeholder:text-slate-400 caret-black shadow-xs"
             />
           </div>
 
@@ -137,7 +141,7 @@ export default function Login() {
               placeholder="Nenosiri (Password)"
               value={formData.password}
               onChange={handleChange}
-              className="w-full px-4 py-2.5 text-sm text-slate-900 bg-white border border-slate-300 rounded-full focus:border-black focus:ring-1 focus:ring-black outline-none transition-all placeholder:text-slate-400 caret-black shadow-xs"
+              className="w-full px-4 py-2.5 text-sm text-slate-900 bg-white border border-slate-300 rounded-full focus:border-black outline-none transition-all placeholder:text-slate-400 caret-black shadow-xs"
             />
           </div>
 
@@ -150,10 +154,9 @@ export default function Login() {
           </button>
         </form>
 
-        {/* Don't have an account */}
         <div className="mt-12">
           <h3 className="text-sm font-normal text-slate-600 mb-3">
-            Don't have an account?
+            Huna akaunti bado?
           </h3>
 
           <button
