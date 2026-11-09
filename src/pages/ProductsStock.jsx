@@ -1,55 +1,139 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import axios from 'axios';
-import { 
-  Package, 
-  Plus, 
-  Search, 
-  RefreshCw, 
-  AlertTriangle, 
-  CheckCircle2, 
-  XCircle, 
-  TrendingUp, 
+import {
+  Package,
+  Plus,
+  Search,
+  RefreshCw,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  TrendingUp,
   Boxes,
   PlusCircle,
   MinusCircle
 } from 'lucide-react';
 import Modal from '../components/common/Modal';
 
+// =====================================================================
+// API CONFIG
+// Set VITE_API_URL in Vercel (e.g. https://your-backend.onrender.com)
+// Falls back to localhost only for local development.
+// =====================================================================
+const API_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '');
+
+const api = axios.create({
+  baseURL: `${API_URL}/api/v1`,
+  timeout: 60000 // Render free tier can take ~50s to wake up
+});
+
+const LOW_STOCK_LIMIT = 5;
+const EMPTY_FORM = { name: '', category: '', sellingPrice: '', stockQuantity: '' };
+
+// =====================================================================
+// HELPERS
+// =====================================================================
+const getPrice = (p) => Number(p?.selling_price ?? p?.sellingPrice ?? p?.price ?? 0) || 0;
+const getStock = (p) => Number(p?.stock_quantity ?? p?.stockQuantity ?? p?.stock ?? 0) || 0;
+
+// Works with plain arrays and DRF paginated responses ({ results: [...] })
+const extractList = (data) => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.results)) return data.results;
+  return [];
+};
+
+// Turns axios / DRF errors into a readable Swahili message
+const getErrorMessage = (err, fallback) => {
+  if (err?.code === 'ECONNABORTED') {
+    return 'Seva imechukua muda mrefu kujibu. Jaribu tena baada ya sekunde chache.';
+  }
+  if (!err?.response) {
+    return 'Hakuna mawasiliano na seva. Hakikisha una intaneti na seva iko wazi.';
+  }
+  const data = err.response.data;
+  if (data && typeof data === 'object') {
+    const first = Object.entries(data)[0];
+    if (first) {
+      const [field, msg] = first;
+      const text = Array.isArray(msg) ? msg[0] : typeof msg === 'string' ? msg : '';
+      if (text) return `${field}: ${text}`;
+    }
+  }
+  return fallback;
+};
+
 export default function ProductsStock() {
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Zote');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState({ name: '', category: '', sellingPrice: '', stockQuantity: '' });
+  const [loading, setLoading] = useState(false); // fetching list
+  const [saving, setSaving] = useState(false); // saving new product
+  const [error, setError] = useState(''); // list-level error banner
+  const [formError, setFormError] = useState(''); // modal error
+  const [form, setForm] = useState(EMPTY_FORM);
+
+  // Prevents state updates after the component unmounts
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   // 1. Fetch Real Products from Django
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
-      const res = await axios.get('http://127.0.0.1:8000/api/v1/products/');
-      setProducts(res.data || []);
+      const res = await api.get('/products/');
+      if (mountedRef.current) setProducts(extractList(res.data));
     } catch (e) {
       console.warn('Stock fetch error:', e);
+      if (mountedRef.current) {
+        setError(getErrorMessage(e, 'Imeshindikana kupakia bidhaa.'));
+      }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchProducts();
-  }, []);
+  }, [fetchProducts]);
 
   // 2. Save New Product to Django
+  const closeModal = () => {
+    if (saving) return;
+    setIsModalOpen(false);
+    setFormError('');
+  };
+
   const handleSaveProduct = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    if (saving) return;
 
-    const priceNum = Number(form.sellingPrice) || 0;
-    const stockNum = Number(form.stockQuantity) || 0;
+    const name = form.name.trim();
+    const priceNum = Number(form.sellingPrice);
+    const stockNum = Number(form.stockQuantity);
+
+    if (!name) {
+      setFormError('Andika jina la bidhaa.');
+      return;
+    }
+    if (!Number.isFinite(priceNum) || priceNum <= 0) {
+      setFormError('Bei ya kuuza lazima iwe kubwa kuliko 0.');
+      return;
+    }
+    if (!Number.isInteger(stockNum) || stockNum < 0) {
+      setFormError('Idadi ya stock lazima iwe namba nzima (0 au zaidi).');
+      return;
+    }
 
     const payload = {
-      name: form.name.trim(),
+      name,
       category: form.category.trim() || 'Duka',
       selling_price: priceNum,
       price: priceNum,
@@ -57,59 +141,70 @@ export default function ProductsStock() {
       stock: stockNum
     };
 
+    setSaving(true);
+    setFormError('');
     try {
-      const res = await axios.post('http://127.0.0.1:8000/api/v1/products/', payload);
+      const res = await api.post('/products/', payload);
+      if (!mountedRef.current) return;
       setProducts((prev) => [res.data, ...prev]);
       setIsModalOpen(false);
-      setForm({ name: '', category: '', sellingPrice: '', stockQuantity: '' });
+      setForm(EMPTY_FORM);
     } catch (err) {
-      alert('Imeshindikana kuongeza bidhaa. Hakikisha seva ya Django iko wazi.');
+      console.warn('Product save error:', err);
+      if (mountedRef.current) {
+        setFormError(getErrorMessage(err, 'Imeshindikana kuongeza bidhaa. Jaribu tena.'));
+      }
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setSaving(false);
     }
   };
 
   // 3. Quick Stock Adjust (+1 / -1) directly on the ledger table
   const handleAdjustStock = async (product, delta) => {
-    const currentStock = product.stock_quantity ?? product.stockQuantity ?? product.stock ?? 0;
+    const currentStock = getStock(product);
     const newStock = Math.max(0, currentStock + delta);
+    if (newStock === currentStock) return;
 
-    // Optimistic UI update
+    // Optimistic UI update (keep every stock key in sync so the display never goes stale)
     setProducts((prev) =>
-      prev.map((p) => (p.id === product.id ? { ...p, stock_quantity: newStock } : p))
+      prev.map((p) =>
+        p.id === product.id ? { ...p, stock_quantity: newStock, stock: newStock } : p
+      )
     );
 
     try {
-      await axios.patch(`http://127.0.0.1:8000/api/v1/products/${product.id}/`, {
-        stock_quantity: newStock
+      await api.patch(`/products/${product.id}/`, {
+        stock_quantity: newStock,
+        stock: newStock
       });
     } catch (e) {
-      fetchProducts(); // Rollback if error
+      console.warn('Stock adjust error:', e);
+      if (mountedRef.current) {
+        setError(getErrorMessage(e, 'Imeshindikana kubadilisha idadi ya stoo.'));
+      }
+      fetchProducts(); // Rollback to server truth
     }
   };
 
   // Unique Inventory Calculations (Warehouse Valuation)
-  const totalStockValue = useMemo(() => {
-    return products.reduce((sum, p) => {
-      const price = Number(p.selling_price || p.sellingPrice || p.price || 0);
-      const qty = Number(p.stock_quantity ?? p.stockQuantity ?? p.stock ?? 0);
-      return sum + price * qty;
-    }, 0);
-  }, [products]);
+  const totalStockValue = useMemo(
+    () => products.reduce((sum, p) => sum + getPrice(p) * getStock(p), 0),
+    [products]
+  );
 
-  const lowStockCount = useMemo(() => {
-    return products.filter((p) => {
-      const qty = Number(p.stock_quantity ?? p.stockQuantity ?? p.stock ?? 0);
-      return qty > 0 && qty <= 5;
-    }).length;
-  }, [products]);
+  const lowStockCount = useMemo(
+    () =>
+      products.filter((p) => {
+        const qty = getStock(p);
+        return qty > 0 && qty <= LOW_STOCK_LIMIT;
+      }).length,
+    [products]
+  );
 
-  const outOfStockCount = useMemo(() => {
-    return products.filter((p) => {
-      const qty = Number(p.stock_quantity ?? p.stockQuantity ?? p.stock ?? 0);
-      return qty === 0;
-    }).length;
-  }, [products]);
+  const outOfStockCount = useMemo(
+    () => products.filter((p) => getStock(p) === 0).length,
+    [products]
+  );
 
   // Dynamic Categories Extract
   const categories = useMemo(() => {
@@ -117,22 +212,30 @@ export default function ProductsStock() {
     return ['Zote', ...Array.from(list)];
   }, [products]);
 
-  const filtered = products.filter((p) => {
-    const matchesSearch = (p.name || '').toLowerCase().includes(search.toLowerCase());
-    const matchesCat = selectedCategory === 'Zote' || p.category === selectedCategory;
-    return matchesSearch && matchesCat;
-  });
+  // If the selected category no longer exists, go back to "Zote"
+  useEffect(() => {
+    if (!categories.includes(selectedCategory)) setSelectedCategory('Zote');
+  }, [categories, selectedCategory]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return products.filter((p) => {
+      const matchesSearch = (p.name || '').toLowerCase().includes(q);
+      const matchesCat = selectedCategory === 'Zote' || p.category === selectedCategory;
+      return matchesSearch && matchesCat;
+    });
+  }, [products, search, selectedCategory]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-5 select-none font-sans pb-28">
-      
-      {/* 
+
+      {/*
         ========================================================================
         1. INVENTORY VALUATION KPI CARDS (Unique to Stock Tab)
         ========================================================================
       */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        
+
         {/* Thamani ya Stoo */}
         <div className="p-4 sm:p-5 rounded-[24px] bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl border border-slate-200/80 dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
           <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
@@ -187,13 +290,13 @@ export default function ProductsStock() {
 
       </div>
 
-      {/* 
+      {/*
         ========================================================================
         2. INVENTORY CONTROL HEADER (Search + Categories + Add Button)
         ========================================================================
       */}
       <div className="bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl p-4 sm:p-5 rounded-[26px] border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
-        
+
         {/* Search */}
         <div className="relative flex-1 w-full">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -210,20 +313,40 @@ export default function ProductsStock() {
         <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
           <button
             onClick={fetchProducts}
-            className="p-2.5 rounded-full bg-slate-100/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-all cursor-pointer"
+            disabled={loading}
+            className="p-2.5 rounded-full bg-slate-100/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-all cursor-pointer disabled:opacity-60"
             title="Sawazisha Stoo"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-500' : ''}`} />
           </button>
 
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              setFormError('');
+              setIsModalOpen(true);
+            }}
             className="py-2.5 px-5 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" /> Ongeza Bidhaa Mpya
           </button>
         </div>
       </div>
+
+      {/* Error Banner (list-level) */}
+      {error && (
+        <div className="flex items-center justify-between gap-3 p-4 rounded-[20px] bg-rose-50 dark:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/60">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+            <p className="text-xs font-bold text-rose-600 dark:text-rose-400">{error}</p>
+          </div>
+          <button
+            onClick={fetchProducts}
+            className="shrink-0 py-1.5 px-4 rounded-full bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold active:scale-95 transition-all cursor-pointer"
+          >
+            Jaribu Tena
+          </button>
+        </div>
+      )}
 
       {/* Category Pills */}
       {categories.length > 1 && (
@@ -244,14 +367,19 @@ export default function ProductsStock() {
         </div>
       )}
 
-      {/* 
+      {/*
         ========================================================================
         3. THE INVENTORY LEDGER TABLE (Unique Table Design for Stock)
         ========================================================================
       */}
       <div className="bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl rounded-[28px] border border-slate-200/80 dark:border-slate-800 shadow-[0_8px_30px_rgba(0,0,0,0.02)] overflow-hidden">
-        
-        {filtered.length === 0 ? (
+
+        {loading && products.length === 0 ? (
+          <div className="p-12 text-center space-y-3">
+            <RefreshCw className="w-8 h-8 text-blue-500 mx-auto animate-spin" />
+            <p className="text-xs text-slate-500">Inapakia bidhaa za stoo...</p>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="p-12 text-center space-y-3">
             <Boxes className="w-10 h-10 text-slate-400 mx-auto" />
             <h3 className="font-bold text-slate-800 dark:text-white">Hakuna Bidhaa Iliyopatikana</h3>
@@ -274,9 +402,9 @@ export default function ProductsStock() {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
                 {filtered.map((item) => {
-                  const price = item.selling_price || item.sellingPrice || item.price || 0;
-                  const stock = item.stock_quantity ?? item.stockQuantity ?? item.stock ?? 0;
-                  
+                  const price = getPrice(item);
+                  const stock = getStock(item);
+
                   // Status badge logic
                   let statusBadge = (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400">
@@ -290,7 +418,7 @@ export default function ProductsStock() {
                         <XCircle className="w-3 h-3" /> Imeisha
                       </span>
                     );
-                  } else if (stock <= 5) {
+                  } else if (stock <= LOW_STOCK_LIMIT) {
                     statusBadge = (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-600">
                         <AlertTriangle className="w-3 h-3" /> Inakaribia
@@ -307,7 +435,7 @@ export default function ProductsStock() {
                         {item.category || 'Duka'}
                       </td>
                       <td className="py-4 px-4 font-black text-slate-900 dark:text-white">
-                        TZS {Number(price).toLocaleString()}
+                        TZS {price.toLocaleString()}
                       </td>
                       <td className="py-4 px-4 text-center font-black text-sm text-slate-900 dark:text-white">
                         {stock}
@@ -319,7 +447,8 @@ export default function ProductsStock() {
                         <div className="inline-flex items-center gap-1.5 justify-end">
                           <button
                             onClick={() => handleAdjustStock(item, -1)}
-                            className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition-all cursor-pointer"
+                            disabled={stock === 0}
+                            className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                             title="Punguza 1"
                           >
                             <MinusCircle className="w-4 h-4" />
@@ -344,7 +473,7 @@ export default function ProductsStock() {
       </div>
 
       {/* Modal Add Product to Ledger */}
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Weka Bidhaa Mpya Stoo">
+      <Modal isOpen={isModalOpen} onClose={closeModal} title="Weka Bidhaa Mpya Stoo">
         <form onSubmit={handleSaveProduct} className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5 uppercase tracking-wider">
@@ -381,6 +510,7 @@ export default function ProductsStock() {
               <input
                 required
                 type="number"
+                min="1"
                 placeholder="2000"
                 value={form.sellingPrice}
                 onChange={(e) => setForm({ ...form, sellingPrice: e.target.value })}
@@ -395,6 +525,8 @@ export default function ProductsStock() {
               <input
                 required
                 type="number"
+                min="0"
+                step="1"
                 placeholder="50"
                 value={form.stockQuantity}
                 onChange={(e) => setForm({ ...form, stockQuantity: e.target.value })}
@@ -403,12 +535,20 @@ export default function ProductsStock() {
             </div>
           </div>
 
+          {/* Modal error (replaces the old browser alert) */}
+          {formError && (
+            <div className="flex items-start gap-2 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/60">
+              <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+              <p className="text-xs font-bold text-rose-600 dark:text-rose-400">{formError}</p>
+            </div>
+          )}
+
           <button
             type="submit"
-            disabled={loading}
-            className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl active:scale-95 transition-all mt-3 cursor-pointer shadow-md shadow-blue-600/30"
+            disabled={saving}
+            className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl active:scale-95 transition-all mt-3 cursor-pointer shadow-md shadow-blue-600/30 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {loading ? 'Inahifadhi...' : 'Hifadhi Bidhaa Kwenye Database ➔'}
+            {saving ? 'Inahifadhi...' : 'Hifadhi Bidhaa Kwenye Database ➔'}
           </button>
         </form>
       </Modal>
