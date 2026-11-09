@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
-import { api, getErrorMessage } from '../api';
+import { api, getErrorMessage } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import SalesProfitCurve from '../components/charts/SalesProfitCurve';
 import {
