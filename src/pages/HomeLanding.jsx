@@ -11,11 +11,10 @@ import {
   Layers, 
   Receipt,
   Zap,
-  Star,
-  Check
+  Star
 } from 'lucide-react';
 
-// Web Audio API for tactile Apple-style tactile feedback
+// Web Audio API for tactile Apple-style feedback
 const playAppleClick = () => {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -31,7 +30,7 @@ const playAppleClick = () => {
     osc.start();
     osc.stop(ctx.currentTime + 0.04);
   } catch (e) {
-    // Graceful fallback if audio permissions are blocked
+    // Graceful fallback
   }
 };
 
@@ -39,7 +38,7 @@ export default function HomeLanding() {
   const navigate = useNavigate();
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
-  // Dynamic light mesh tracking cursor movement behind translucent glass
+  // Dynamic light mesh tracking cursor movement
   useEffect(() => {
     const handleMouseMove = (e) => {
       setMousePos({ x: e.clientX, y: e.clientY });
@@ -56,18 +55,48 @@ export default function HomeLanding() {
   return (
     <div className="min-h-screen bg-[#FBFBFD] text-slate-900 flex flex-col justify-between selection:bg-blue-600 selection:text-white overflow-x-hidden font-[-apple-system,BlinkMacSystemFont,'SF_Pro_Display','SF_Pro_Text','Segoe_UI',Roboto,sans-serif] relative">
       
-      {/* Dynamic Background Light Orbs (Linear/Apple Ambient Blur) */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 opacity-60">
-        <div className="absolute top-[-8%] left-[-10%] w-[60vw] h-[60vw] rounded-full bg-gradient-to-tr from-sky-200/50 via-indigo-100/40 to-blue-200/30 blur-[130px] animate-pulse"></div>
-        <div className="absolute top-[35%] right-[-10%] w-[55vw] h-[55vw] rounded-full bg-gradient-to-br from-purple-100/40 via-blue-200/40 to-sky-100/30 blur-[150px] animate-ping" style={{ animationDuration: '10s' }}></div>
+      {/* ========================================== */}
+      {/* ANIMATED BACKGROUND: Upward Floating Glass Orbs */}
+      {/* ========================================== */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+        {/* Floating Bubble / Orb 1 */}
+        <div className="absolute bottom-[-10%] left-[10%] w-72 h-72 rounded-full bg-gradient-to-tr from-blue-300/30 to-sky-200/40 blur-2xl animate-[floatUp_12s_ease-in-out_infinite]"></div>
+        
+        {/* Floating Bubble / Orb 2 */}
+        <div className="absolute bottom-[-15%] left-[45%] w-96 h-96 rounded-full bg-gradient-to-tr from-indigo-200/30 to-purple-200/30 blur-3xl animate-[floatUp_16s_ease-in-out_infinite] [animation-delay:3s]"></div>
+        
+        {/* Floating Bubble / Orb 3 */}
+        <div className="absolute bottom-[-10%] right-[15%] w-80 h-80 rounded-full bg-gradient-to-tr from-sky-200/45 to-blue-100/30 blur-2xl animate-[floatUp_10s_ease-in-out_infinite] [animation-delay:6s]"></div>
+
+        {/* Floating Bubble / Orb 4 */}
+        <div className="absolute bottom-[-20%] left-[70%] w-64 h-64 rounded-full bg-gradient-to-tr from-purple-200/30 to-blue-200/40 blur-2xl animate-[floatUp_14s_ease-in-out_infinite] [animation-delay:2s]"></div>
+
+        {/* Cursor interactive glow mesh */}
         <div 
-          className="absolute w-[35vw] h-[35vw] rounded-full bg-blue-300/25 blur-[110px] transition-all duration-300 ease-out pointer-events-none"
+          className="absolute w-[35vw] h-[35vw] rounded-full bg-blue-300/20 blur-[110px] transition-all duration-300 ease-out pointer-events-none"
           style={{ top: `${mousePos.y - 180}px`, left: `${mousePos.x - 180}px` }}
         ></div>
       </div>
 
+      {/* Tailwind Custom Keyframes Injection for Upward Floating Animation */}
+      <style>{`
+        @keyframes floatUp {
+          0% {
+            transform: translateY(0px) scale(1);
+            opacity: 0.3;
+          }
+          50% {
+            opacity: 0.7;
+          }
+          100% {
+            transform: translateY(-110vh) scale(1.1);
+            opacity: 0;
+          }
+        }
+      `}</style>
+
       {/* Top Glassmorphism Navigation Bar */}
-      <header className="w-full max-w-6xl mx-auto px-6 py-4 flex items-center justify-between sticky top-4 z-50 bg-white/60 backdrop-blur-3xl border border-white/80 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.03)] mx-4 my-2">
+      <header className="w-full max-w-6xl mx-auto px-6 py-4 flex items-center justify-between sticky top-4 z-50 bg-white/70 backdrop-blur-3xl border border-white/90 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.03)] mx-4 my-2">
         <div 
           className="flex items-center gap-3 cursor-pointer select-none group" 
           onClick={() => handleAction('/')}
@@ -94,7 +123,7 @@ export default function HomeLanding() {
         <div className="flex items-center gap-3">
           <button 
             onClick={() => handleAction('/login')} 
-            className="py-2 px-5 bg-white/70 hover:bg-white text-slate-800 text-xs font-semibold rounded-full border border-slate-200/70 transition-all active:scale-95 backdrop-blur-md cursor-pointer shadow-xs"
+            className="py-2 px-5 bg-white/80 hover:bg-white text-slate-800 text-xs font-semibold rounded-full border border-slate-200/70 transition-all active:scale-95 backdrop-blur-md cursor-pointer shadow-xs"
           >
             Ingia
           </button>
@@ -160,7 +189,7 @@ export default function HomeLanding() {
           </div>
         </div>
 
-        {/* Linear/Stripe Style Translucent Glass App Mockup */}
+        {/* Translucent Glass App Mockup */}
         <div id="preview" className="relative mx-auto max-w-5xl rounded-[36px] p-3 bg-white/40 border border-white/80 shadow-[0_30px_90px_rgba(0,0,0,0.06)] backdrop-blur-3xl">
           <div className="bg-white/80 rounded-[30px] p-6 sm:p-8 space-y-6 border border-white/90 shadow-inner">
             
