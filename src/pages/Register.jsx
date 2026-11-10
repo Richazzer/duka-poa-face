@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { API_BASE_URL } from '../config';
+
+// Self-contained API URL (No external config import needed!)
+const API_BASE_URL = 
+  import.meta.env.VITE_API_URL || 'https://duka-poa.onrender.com';
 
 export default function Register() {
   const [showEmailForm, setShowEmailForm] = useState(false);
@@ -45,7 +48,7 @@ export default function Register() {
             navigate('/app');
           }
         } catch (err) {
-          setError('Imeshindikana kuunganisha akaunti ya Google. Tafadhali jaribu tena.');
+          setError('Imeshindikana kuunganisha akaunti ya Google. Jaribu tena.');
         } finally {
           setLoading(false);
         }
@@ -55,7 +58,7 @@ export default function Register() {
     window.google.accounts.id.prompt();
   };
 
-  // 2. Direct Account Creation (Zero OTP)
+  // 2. Direct Account Creation with Confirm Password (Zero OTP)
   const handleEmailSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -87,7 +90,6 @@ export default function Register() {
       localStorage.setItem('refresh_token', refresh_token);
       if (user) localStorage.setItem('user', JSON.stringify(user));
 
-      // Direct entry to Welcome Splash without any OTP
       navigate('/welcome');
 
     } catch (err) {
@@ -139,7 +141,7 @@ export default function Register() {
           <div className="flex-1 h-[1px] bg-slate-200"></div>
         </div>
 
-        {/* Email Registration Form */}
+        {/* Form */}
         {!showEmailForm ? (
           <button
             type="button"
