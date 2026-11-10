@@ -87,6 +87,7 @@ export default function ProfileSettings() {
   }, []);
 
   const handleLogout = () => {
+    // 💥 Clears tokens and cached numbers so the next user starts fresh
     localStorage.clear();
     sessionStorage.clear();
     window.location.href = '/login';
