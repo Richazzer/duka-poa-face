@@ -1,10 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-
-// Self-contained API URL (No external config import needed!)
-const API_BASE_URL = 
-  import.meta.env.VITE_API_URL || 'https://duka-poa.onrender.com';
+import { API_BASE_URL } from '../config';
 
 export default function Register() {
   const [showEmailForm, setShowEmailForm] = useState(false);
@@ -17,7 +14,7 @@ export default function Register() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  // 1. Google Direct Sign-Up (Zero OTP)
+  // Google Sign-Up (Zero OTP)
   const handleGoogleSignup = () => {
     if (!window.google) {
       alert('Tafadhali subiri sekunde chache Google ipakie kisha jaribu tena.');
@@ -58,7 +55,7 @@ export default function Register() {
     window.google.accounts.id.prompt();
   };
 
-  // 2. Direct Account Creation with Confirm Password (Zero OTP)
+  // Direct Account Creation (Zero OTP)
   const handleEmailSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -119,7 +116,6 @@ export default function Register() {
           </div>
         )}
 
-        {/* Continue with Google */}
         <button
           type="button"
           onClick={handleGoogleSignup}
@@ -134,14 +130,12 @@ export default function Register() {
           Continue with Google
         </button>
 
-        {/* Divider */}
         <div className="flex items-center my-3">
           <div className="flex-1 h-[1px] bg-slate-200"></div>
           <span className="px-3 text-xs text-slate-500 font-medium">or</span>
           <div className="flex-1 h-[1px] bg-slate-200"></div>
         </div>
 
-        {/* Form */}
         {!showEmailForm ? (
           <button
             type="button"
