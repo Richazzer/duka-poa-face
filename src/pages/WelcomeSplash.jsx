@@ -1,13 +1,47 @@
-import React from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+
+const AUTO_CONTINUE_MS = 4000; // welcome the user, then move on to business onboarding
+
+const readUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem('user') || 'null');
+  } catch {
+    return null;
+  }
+};
+
+const hasSession = () => {
+  try {
+    return Boolean(localStorage.getItem('access_token') || localStorage.getItem('token'));
+  } catch {
+    return false;
+  }
+};
 
 export default function WelcomeSplash() {
   const navigate = useNavigate();
 
+  // "juma.ali23@gmail.com" -> "Juma"
+  const firstName = useMemo(() => {
+    const local = (readUser()?.email || '').split('@')[0].split(/[._\-+\d]/)[0];
+    return local ? local.charAt(0).toUpperCase() + local.slice(1) : '';
+  }, []);
+
+  useEffect(() => {
+    // Nobody is signed in: this screen is only for people who just registered
+    if (!hasSession()) {
+      navigate('/register', { replace: true });
+      return undefined;
+    }
+    const timer = setTimeout(() => navigate('/onboarding/splash', { replace: true }), AUTO_CONTINUE_MS);
+    return () => clearTimeout(timer);
+  }, [navigate]);
+
   return (
     <div className="min-h-screen bg-[#f3f5f9] flex items-center justify-center p-4">
       <div className="w-full max-w-[440px] bg-white rounded-3xl p-8 sm:p-10 shadow-[0_10px_35px_rgba(0,0,0,0.04)] border border-slate-100 flex flex-col items-center text-center">
-        
+
         {/* Apple-style Blue Icon Badge */}
         <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center mb-6 shadow-sm">
           <span className="text-3xl">🏪</span>
@@ -15,7 +49,7 @@ export default function WelcomeSplash() {
 
         {/* Title */}
         <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
-          Karibu Duka Poa!
+          Karibu Duka Poa{firstName ? `, ${firstName}` : ''}!
         </h1>
 
         {/* Description */}
@@ -23,10 +57,14 @@ export default function WelcomeSplash() {
           Mfumo wa kisasa wa kusimamia mauzo, stoo, madeni na faida ya duka lako kwa urahisi popote ulipo.
         </p>
 
+        <p className="text-xs text-slate-400 mt-3">
+          Tunakupeleka kuweka taarifa za biashara yako...
+        </p>
+
         {/* Action Button */}
         <div className="w-full mt-8">
           <button
-            onClick={() => navigate('/onboarding/splash')}
+            onClick={() => navigate('/onboarding/splash', { replace: true })}
             className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-2xl transition-all shadow-sm active:scale-[0.99]"
           >
             Weka Taarifa za Biashara ➔
