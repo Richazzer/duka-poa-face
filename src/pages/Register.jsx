@@ -87,7 +87,7 @@ export default function Register() {
       localStorage.setItem('refresh_token', refresh_token);
       if (user) localStorage.setItem('user', JSON.stringify(user));
 
-      // Direct entry to Welcome Splash!
+      // Direct entry to Welcome Splash without any OTP
       navigate('/welcome');
 
     } catch (err) {
