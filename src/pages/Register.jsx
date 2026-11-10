@@ -1,99 +1,110 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import { API_BASE_URL } from '../config';
+import { api, getErrorMessage } from '../services/api';
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 6;
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+// Saves the login under the same keys the rest of the app already reads
+const saveSession = ({ access_token, refresh_token, user }) => {
+  localStorage.setItem('access_token', access_token);
+  localStorage.setItem('token', access_token);
+  localStorage.setItem('refresh_token', refresh_token);
+  if (user) localStorage.setItem('user', JSON.stringify(user));
+};
 
 export default function Register() {
   const [showEmailForm, setShowEmailForm] = useState(false);
-  const [formData, setFormData] = useState({ 
-    email: '', 
-    password: '', 
-    confirmPassword: '' 
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    confirmPassword: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  // 1. Google Direct Sign-Up (Zero OTP)
+  const passwordsMismatch =
+    formData.confirmPassword.length > 0 && formData.password !== formData.confirmPassword;
+
+  // 1. Google Direct Sign-Up (no OTP): new accounts go Welcome -> Onboarding
   const handleGoogleSignup = () => {
-    if (!window.google) {
-      alert('Tafadhali subiri sekunde chache Google ipakie kisha jaribu tena.');
+    if (loading) return;
+    setError('');
+
+    if (!window.google?.accounts?.id) {
+      setError('Google bado inapakia. Subiri sekunde chache kisha jaribu tena.');
+      return;
+    }
+    if (!GOOGLE_CLIENT_ID) {
+      setError('Kuingia kwa Google hakujawekwa bado. Tafadhali tumia barua pepe.');
       return;
     }
 
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '825907989396-placeholder.apps.googleusercontent.com';
-
     window.google.accounts.id.initialize({
-      client_id: clientId,
+      client_id: GOOGLE_CLIENT_ID,
       callback: async (response) => {
         setLoading(true);
         setError('');
         try {
-          const res = await axios.post(`${API_BASE_URL}/api/v1/auth/google/`, {
-            credential: response.credential
-          });
-
-          const { access_token, refresh_token, is_onboarded, user } = res.data;
-          localStorage.setItem('access_token', access_token);
-          localStorage.setItem('token', access_token);
-          localStorage.setItem('refresh_token', refresh_token);
-          if (user) localStorage.setItem('user', JSON.stringify(user));
-
-          if (!is_onboarded) {
-            navigate('/welcome');
-          } else {
-            navigate('/app');
-          }
+          const res = await api.post('/auth/google/', { credential: response.credential });
+          saveSession(res.data);
+          navigate(res.data.is_onboarded ? '/app' : '/welcome', { replace: true });
         } catch (err) {
-          setError('Imeshindikana kuunganisha akaunti ya Google. Tafadhali jaribu tena.');
+          setError(getErrorMessage(err, 'Imeshindikana kuunganisha akaunti ya Google. Tafadhali jaribu tena.'));
         } finally {
           setLoading(false);
         }
       }
     });
 
-    window.google.accounts.id.prompt();
+    window.google.accounts.id.prompt((notification) => {
+      if (notification.isNotDisplayed?.()) {
+        setError('Dirisha la Google halikuonekana. Jaribu tena au tumia barua pepe.');
+      }
+    });
   };
 
-  // 2. Direct Account Creation (Zero OTP)
+  // 2. Direct Account Creation (no OTP): password + confirm password
   const handleEmailSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     setError('');
 
-    const cleanEmail = formData.email.trim();
+    const cleanEmail = formData.email.trim().toLowerCase();
+
+    if (!EMAIL_PATTERN.test(cleanEmail)) {
+      setError('Barua pepe si sahihi. Tafadhali iangalie tena.');
+      return;
+    }
+
+    if (formData.password.length < MIN_PASSWORD_LENGTH) {
+      setError('Nenosiri linapaswa kuwa na herufi au tarakimu zisizopungua 6.');
+      return;
+    }
 
     if (formData.password !== formData.confirmPassword) {
       setError('Nenosiri halifanani. Tafadhali thibitisha nenosiri lako tena.');
       return;
     }
 
-    if (formData.password.length < 6) {
-      setError('Nenosiri linapaswa kuwa na herufi au tarakimu zisizopungua 6.');
-      return;
-    }
-
     setLoading(true);
 
     try {
-      const res = await axios.post(`${API_BASE_URL}/api/v1/auth/register/`, {
+      const res = await api.post('/auth/register/', {
         email: cleanEmail,
         password: formData.password,
+        confirm_password: formData.confirmPassword
       });
 
-      const { access_token, refresh_token, user } = res.data;
+      saveSession(res.data);
 
-      localStorage.setItem('access_token', access_token);
-      localStorage.setItem('token', access_token);
-      localStorage.setItem('refresh_token', refresh_token);
-      if (user) localStorage.setItem('user', JSON.stringify(user));
-
-      // Direct entry to Welcome Splash without any OTP
-      navigate('/welcome');
-
+      // Welcome splash first, then business onboarding
+      navigate('/welcome', { replace: true });
     } catch (err) {
       console.error(err);
-      const serverMsg = err.response?.data?.error || err.response?.data?.message;
-      setError(serverMsg || 'Imeshindikana kusajili akaunti. Tafadhali jaribu tena.');
+      setError(getErrorMessage(err, 'Imeshindikana kusajili akaunti. Tafadhali jaribu tena.'));
     } finally {
       setLoading(false);
     }
@@ -102,7 +113,7 @@ export default function Register() {
   return (
     <div className="min-h-screen bg-white flex flex-col justify-center items-center px-6 py-12 selection:bg-slate-100 font-sans">
       <div className="w-full max-w-[340px] sm:max-w-[360px] flex flex-col">
-        
+
         <h1 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight leading-none mb-10">
           Happening now
         </h1>
@@ -121,7 +132,8 @@ export default function Register() {
         <button
           type="button"
           onClick={handleGoogleSignup}
-          className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold rounded-full border border-slate-300 flex items-center justify-center gap-3 transition-all active:scale-[0.99] shadow-sm mb-3 cursor-pointer"
+          disabled={loading}
+          className="w-full py-2.5 px-4 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold rounded-full border border-slate-300 flex items-center justify-center gap-3 transition-all active:scale-[0.99] shadow-sm mb-3 cursor-pointer disabled:opacity-60"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -149,13 +161,15 @@ export default function Register() {
             Create account
           </button>
         ) : (
-          <form onSubmit={handleEmailSubmit} className="space-y-3 mt-1">
+          <form onSubmit={handleEmailSubmit} className="space-y-3 mt-1" noValidate>
             <div>
               <input
                 type="email"
                 required
+                autoComplete="email"
                 placeholder="Barua pepe (Email)"
                 value={formData.email}
+                disabled={loading}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 className="w-full px-4 py-2.5 text-sm text-slate-900 bg-white border border-slate-300 rounded-full focus:border-black outline-none transition-all placeholder:text-slate-400 caret-black"
               />
@@ -165,8 +179,10 @@ export default function Register() {
               <input
                 type="password"
                 required
+                autoComplete="new-password"
                 placeholder="Weka Nenosiri (Password)"
                 value={formData.password}
+                disabled={loading}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 className="w-full px-4 py-2.5 text-sm text-slate-900 bg-white border border-slate-300 rounded-full focus:border-black outline-none transition-all placeholder:text-slate-400 caret-black"
               />
@@ -176,11 +192,20 @@ export default function Register() {
               <input
                 type="password"
                 required
+                autoComplete="new-password"
                 placeholder="Thibitisha Nenosiri (Confirm Password)"
                 value={formData.confirmPassword}
+                disabled={loading}
                 onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                className="w-full px-4 py-2.5 text-sm text-slate-900 bg-white border border-slate-300 rounded-full focus:border-black outline-none transition-all placeholder:text-slate-400 caret-black"
+                className={`w-full px-4 py-2.5 text-sm text-slate-900 bg-white border rounded-full outline-none transition-all placeholder:text-slate-400 caret-black ${
+                  passwordsMismatch ? 'border-red-400 focus:border-red-500' : 'border-slate-300 focus:border-black'
+                }`}
               />
+              {passwordsMismatch && (
+                <p className="text-[11px] text-red-500 font-semibold mt-1.5 px-4">
+                  Nenosiri halifanani
+                </p>
+              )}
             </div>
 
             <button
