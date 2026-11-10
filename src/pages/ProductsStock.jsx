@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import axios from 'axios';
 import { 
   Plus, 
   Search, 
@@ -12,7 +11,7 @@ import {
   MinusCircle
 } from 'lucide-react';
 import Modal from '../components/common/Modal';
-import { API_BASE_URL } from '../config'; // <--- FIXED: CONNECTS TO LIVE BACKEND
+import { api } from '../config';
 
 export default function ProductsStock() {
   const [products, setProducts] = useState([]);
@@ -22,11 +21,11 @@ export default function ProductsStock() {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ name: '', category: '', sellingPrice: '', stockQuantity: '' });
 
-  // 1. Fetch Real Products from Live Render Backend
+  // 1. Fetch Products
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(`${API_BASE_URL}/api/v1/products/`);
+      const res = await api.get('/products/');
       setProducts(res.data || []);
     } catch (e) {
       console.warn('Stock fetch error:', e);
@@ -39,7 +38,7 @@ export default function ProductsStock() {
     fetchProducts();
   }, []);
 
-  // 2. Save New Product to Live Render Backend
+  // 2. Save Product
   const handleSaveProduct = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -50,28 +49,28 @@ export default function ProductsStock() {
     const payload = {
       name: form.name.trim(),
       category: form.category.trim() || 'Duka',
-      selling_price: priceNum,
       price: priceNum,
-      stock_quantity: stockNum,
-      stock: stockNum
+      selling_price: priceNum,
+      stock: stockNum,
+      stock_quantity: stockNum
     };
 
     try {
-      const res = await axios.post(`${API_BASE_URL}/api/v1/products/`, payload);
+      const res = await api.post('/products/', payload);
       setProducts((prev) => [res.data, ...prev]);
       setIsModalOpen(false);
       setForm({ name: '', category: '', sellingPrice: '', stockQuantity: '' });
     } catch (err) {
       console.error('Save product error:', err);
-      alert('Imeshindikana kuongeza bidhaa. Hakikisha seva iko wazi.');
+      alert('Imeshindikana kuongeza bidhaa. Hakikisha umeingia kwenye akaunti yako.');
     } finally {
       setLoading(false);
     }
   };
 
-  // 3. Quick Stock Adjust
+  // 3. Quick Stock Adjust (+1 / -1)
   const handleAdjustStock = async (product, delta) => {
-    const currentStock = product.stock_quantity ?? product.stock ?? 0;
+    const currentStock = product.stock ?? product.stock_quantity ?? 0;
     const newStock = Math.max(0, currentStock + delta);
 
     setProducts((prev) =>
@@ -79,7 +78,7 @@ export default function ProductsStock() {
     );
 
     try {
-      await axios.patch(`${API_BASE_URL}/api/v1/products/${product.id}/`, {
+      await api.patch(`/products/${product.id}/`, {
         stock: newStock,
         stock_quantity: newStock
       });
@@ -142,7 +141,7 @@ export default function ProductsStock() {
         </div>
       </div>
 
-      {/* Control Bar */}
+      {/* Action Header */}
       <div className="bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl p-4 sm:p-5 rounded-[26px] border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="relative flex-1 w-full">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -231,7 +230,7 @@ export default function ProductsStock() {
         )}
       </div>
 
-      {/* Modal */}
+      {/* Add Product Modal (100% High Contrast) */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Weka Bidhaa Mpya Stoo">
         <form onSubmit={handleSaveProduct} className="space-y-4">
           <div>
