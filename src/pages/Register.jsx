@@ -5,12 +5,16 @@ import { API_BASE_URL } from '../config';
 
 export default function Register() {
   const [showEmailForm, setShowEmailForm] = useState(false);
-  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [formData, setFormData] = useState({ 
+    email: '', 
+    password: '', 
+    confirmPassword: '' 
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  // Google Sign-Up: SENDS OTP TO GOOGLE EMAIL
+  // 1. Google Direct Sign-Up (Bypasses OTP)
   const handleGoogleSignup = () => {
     if (!window.google) {
       alert('Tafadhali subiri sekunde chache Google ipakie kisha jaribu tena.');
@@ -26,14 +30,20 @@ export default function Register() {
         setError('');
         try {
           const res = await axios.post(`${API_BASE_URL}/api/v1/auth/google/`, {
-            credential: response.credential,
-            mode: 'signup' // Signals SIGNUP: Generates & Sends OTP!
+            credential: response.credential
           });
 
-          if (res.data.requires_otp) {
-            sessionStorage.setItem('pending_email', res.data.email);
-            sessionStorage.setItem('pending_password', 'GoogleAuthUser'); // placeholder
-            navigate('/otp-verify');
+          const { access_token, refresh_token, is_onboarded, user } = res.data;
+          localStorage.setItem('access_token', access_token);
+          localStorage.setItem('token', access_token);
+          localStorage.setItem('refresh_token', refresh_token);
+          if (user) localStorage.setItem('user', JSON.stringify(user));
+
+          // Direct route: if new user -> welcome splash, if existing -> dashboard
+          if (!is_onboarded) {
+            navigate('/welcome');
+          } else {
+            navigate('/app');
           }
         } catch (err) {
           setError('Imeshindikana kusajili kwa Google. Jaribu tena.');
@@ -46,33 +56,47 @@ export default function Register() {
     window.google.accounts.id.prompt();
   };
 
-  // Email Sign-Up: SENDS OTP
+  // 2. Email Direct Sign-Up with Confirm Password (Bypasses OTP)
   const handleEmailSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
 
     const cleanEmail = formData.email.trim();
 
+    // Password matching validation
+    if (formData.password !== formData.confirmPassword) {
+      setError('Nenosiri halifanani (Passwords do not match). Tafadhali thibitisha tena.');
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      setError('Nenosiri linapaswa kuwa na herufi zisizopungua 6.');
+      return;
+    }
+
+    setLoading(true);
+
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/v1/auth/send-otp/`, {
+      const res = await axios.post(`${API_BASE_URL}/api/v1/auth/register/`, {
         email: cleanEmail,
+        password: formData.password,
       });
 
-      sessionStorage.setItem('pending_email', cleanEmail);
-      sessionStorage.setItem('pending_password', formData.password);
+      const { access_token, refresh_token, user } = res.data;
 
-      navigate('/otp-verify');
+      // Save tokens
+      localStorage.setItem('access_token', access_token);
+      localStorage.setItem('token', access_token);
+      localStorage.setItem('refresh_token', refresh_token);
+      if (user) localStorage.setItem('user', JSON.stringify(user));
+
+      // 💥 DIRECT ENTRY TO WELCOME SPLASH (NO OTP!) 💥
+      navigate('/welcome');
+
     } catch (err) {
-      console.error('OTP Send error:', err.response || err);
-      // Reveals the EXACT error: e.g. Network Error, 500, or specific message
-      const serverMsg = 
-        err.response?.data?.error || 
-        err.response?.data?.message || 
-        (err.response?.data ? JSON.stringify(err.response.data) : null) || 
-        err.message;
-        
-      setError(serverMsg || 'Imeshindikana kutuma OTP. Tafadhali jaribu tena.');
+      console.error(err);
+      const msg = err.response?.data?.error || err.response?.data?.message;
+      setError(msg || 'Imeshindikana kusajili akaunti. Tafadhali jaribu tena.');
     } finally {
       setLoading(false);
     }
@@ -91,7 +115,7 @@ export default function Register() {
         </h2>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 text-xs rounded-2xl text-center font-bold">
+          <div className="mb-4 p-3.5 bg-red-50 border border-red-200 text-red-600 text-xs rounded-2xl text-center font-bold">
             {error}
           </div>
         )}
@@ -118,7 +142,7 @@ export default function Register() {
           <div className="flex-1 h-[1px] bg-slate-200"></div>
         </div>
 
-        {/* Create Account with Email */}
+        {/* Create Account Form */}
         {!showEmailForm ? (
           <button
             type="button"
@@ -129,6 +153,7 @@ export default function Register() {
           </button>
         ) : (
           <form onSubmit={handleEmailSubmit} className="space-y-3 mt-1">
+            {/* Email */}
             <div>
               <input
                 type="email"
@@ -139,6 +164,8 @@ export default function Register() {
                 className="w-full px-4 py-2.5 text-sm text-slate-900 bg-white border border-slate-300 rounded-full focus:border-black outline-none transition-all placeholder:text-slate-400 caret-black"
               />
             </div>
+
+            {/* Password */}
             <div>
               <input
                 type="password"
@@ -149,12 +176,25 @@ export default function Register() {
                 className="w-full px-4 py-2.5 text-sm text-slate-900 bg-white border border-slate-300 rounded-full focus:border-black outline-none transition-all placeholder:text-slate-400 caret-black"
               />
             </div>
+
+            {/* Confirm Password */}
+            <div>
+              <input
+                type="password"
+                required
+                placeholder="Thibitisha Nenosiri (Confirm Password)"
+                value={formData.confirmPassword}
+                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                className="w-full px-4 py-2.5 text-sm text-slate-900 bg-white border border-slate-300 rounded-full focus:border-black outline-none transition-all placeholder:text-slate-400 caret-black"
+              />
+            </div>
+
             <button
               type="submit"
               disabled={loading}
               className="w-full py-2.5 px-4 bg-black hover:bg-slate-900 text-white text-sm font-semibold rounded-full transition-all active:scale-[0.99] disabled:opacity-60 shadow-sm cursor-pointer"
             >
-              {loading ? 'Inatuma OTP...' : 'Endelea na OTP ➔'}
+              {loading ? 'Inasajili akaunti...' : 'Sajili na Endelea ➔'}
             </button>
           </form>
         )}
