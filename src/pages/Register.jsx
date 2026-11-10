@@ -14,7 +14,7 @@ export default function Register() {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  // 1. Google Direct Sign-Up (Bypasses OTP)
+  // 1. Google Direct Sign-Up (Zero OTP)
   const handleGoogleSignup = () => {
     if (!window.google) {
       alert('Tafadhali subiri sekunde chache Google ipakie kisha jaribu tena.');
@@ -39,14 +39,13 @@ export default function Register() {
           localStorage.setItem('refresh_token', refresh_token);
           if (user) localStorage.setItem('user', JSON.stringify(user));
 
-          // Direct route: if new user -> welcome splash, if existing -> dashboard
           if (!is_onboarded) {
             navigate('/welcome');
           } else {
             navigate('/app');
           }
         } catch (err) {
-          setError('Imeshindikana kusajili kwa Google. Jaribu tena.');
+          setError('Imeshindikana kuunganisha akaunti ya Google. Tafadhali jaribu tena.');
         } finally {
           setLoading(false);
         }
@@ -56,21 +55,20 @@ export default function Register() {
     window.google.accounts.id.prompt();
   };
 
-  // 2. Email Direct Sign-Up with Confirm Password (Bypasses OTP)
+  // 2. Direct Account Creation (Zero OTP)
   const handleEmailSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
     const cleanEmail = formData.email.trim();
 
-    // Password matching validation
     if (formData.password !== formData.confirmPassword) {
-      setError('Nenosiri halifanani (Passwords do not match). Tafadhali thibitisha tena.');
+      setError('Nenosiri halifanani. Tafadhali thibitisha nenosiri lako tena.');
       return;
     }
 
     if (formData.password.length < 6) {
-      setError('Nenosiri linapaswa kuwa na herufi zisizopungua 6.');
+      setError('Nenosiri linapaswa kuwa na herufi au tarakimu zisizopungua 6.');
       return;
     }
 
@@ -84,19 +82,18 @@ export default function Register() {
 
       const { access_token, refresh_token, user } = res.data;
 
-      // Save tokens
       localStorage.setItem('access_token', access_token);
       localStorage.setItem('token', access_token);
       localStorage.setItem('refresh_token', refresh_token);
       if (user) localStorage.setItem('user', JSON.stringify(user));
 
-      // 💥 DIRECT ENTRY TO WELCOME SPLASH (NO OTP!) 💥
+      // Direct entry to Welcome Splash!
       navigate('/welcome');
 
     } catch (err) {
       console.error(err);
-      const msg = err.response?.data?.error || err.response?.data?.message;
-      setError(msg || 'Imeshindikana kusajili akaunti. Tafadhali jaribu tena.');
+      const serverMsg = err.response?.data?.error || err.response?.data?.message;
+      setError(serverMsg || 'Imeshindikana kusajili akaunti. Tafadhali jaribu tena.');
     } finally {
       setLoading(false);
     }
@@ -142,7 +139,7 @@ export default function Register() {
           <div className="flex-1 h-[1px] bg-slate-200"></div>
         </div>
 
-        {/* Create Account Form */}
+        {/* Email Registration Form */}
         {!showEmailForm ? (
           <button
             type="button"
@@ -153,7 +150,6 @@ export default function Register() {
           </button>
         ) : (
           <form onSubmit={handleEmailSubmit} className="space-y-3 mt-1">
-            {/* Email */}
             <div>
               <input
                 type="email"
@@ -165,7 +161,6 @@ export default function Register() {
               />
             </div>
 
-            {/* Password */}
             <div>
               <input
                 type="password"
@@ -177,7 +172,6 @@ export default function Register() {
               />
             </div>
 
-            {/* Confirm Password */}
             <div>
               <input
                 type="password"
@@ -194,7 +188,7 @@ export default function Register() {
               disabled={loading}
               className="w-full py-2.5 px-4 bg-black hover:bg-slate-900 text-white text-sm font-semibold rounded-full transition-all active:scale-[0.99] disabled:opacity-60 shadow-sm cursor-pointer"
             >
-              {loading ? 'Inasajili akaunti...' : 'Sajili na Endelea ➔'}
+              {loading ? 'Inasajili...' : 'Sajili Akaunti ➔'}
             </button>
           </form>
         )}
