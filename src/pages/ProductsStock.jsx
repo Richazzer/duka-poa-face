@@ -38,7 +38,7 @@ export default function ProductsStock() {
     fetchProducts();
   }, []);
 
-  // 2. Save Product
+  // 2. Save Product (Shows real error if rejected)
   const handleSaveProduct = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -62,7 +62,15 @@ export default function ProductsStock() {
       setForm({ name: '', category: '', sellingPrice: '', stockQuantity: '' });
     } catch (err) {
       console.error('Save product error:', err);
-      alert('Imeshindikana kuongeza bidhaa. Hakikisha umeingia kwenye akaunti yako.');
+      // Reveals the exact error (e.g. session expired, field error, etc.)
+      if (err.response?.status === 401) {
+        alert('Kipindi chako kimeisha. Tafadhali ingia tena kwenye akaunti yako.');
+        localStorage.clear();
+        window.location.href = '/login';
+      } else {
+        const errorDetail = err.response?.data ? JSON.stringify(err.response.data) : err.message;
+        alert(`Hitilafu: ${errorDetail}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -230,7 +238,7 @@ export default function ProductsStock() {
         )}
       </div>
 
-      {/* Add Product Modal (100% High Contrast) */}
+      {/* Add Product Modal */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Weka Bidhaa Mpya Stoo">
         <form onSubmit={handleSaveProduct} className="space-y-4">
           <div>
