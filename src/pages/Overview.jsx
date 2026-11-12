@@ -147,14 +147,13 @@ export default function Overview() {
     return Math.max(...vals, 1);
   }, [data.weekly_bars]);
 
-  // Reusable Colorless Liquid Glass Card Style Class
   const liquidGlassCard = "p-3.5 sm:p-4 rounded-[22px] bg-white/[0.03] hover:bg-white/[0.05] backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-all";
 
   return (
     <div className="w-full max-w-7xl mx-auto space-y-3 select-none font-sans text-slate-100 pb-36 relative">
       
-      {/* CLEAN COMPACT HEADER & DROPDOWN */}
-      <div className={`flex items-center justify-between ${liquidGlassCard} px-4 py-3`}>
+      {/* CLEAN COMPACT HEADER & DROPDOWN (Overflow visible to prevent clipping) */}
+      <div className={`flex items-center justify-between ${liquidGlassCard} px-4 py-3 relative z-30 overflow-visible`}>
         <div>
           <h2 className="text-xs sm:text-sm font-black text-white">Muhtasari wa Biashara</h2>
           <p className="text-[10px] text-slate-400">Takwimu halisi za duka lako</p>
@@ -171,7 +170,7 @@ export default function Overview() {
           </button>
 
           {isDropdownOpen && (
-            <div className="absolute right-0 mt-1.5 w-32 rounded-xl bg-[#131926]/95 backdrop-blur-3xl border border-white/15 shadow-2xl py-1 z-50">
+            <div className="absolute right-0 mt-2 w-36 rounded-2xl bg-[#0f172a] backdrop-blur-3xl border border-white/20 shadow-[0_15px_40px_rgba(0,0,0,0.6)] py-1.5 z-[9999]">
               {Object.entries(rangeLabels).map(([key, label]) => (
                 <button
                   key={key}
@@ -179,7 +178,7 @@ export default function Overview() {
                     setTimeRange(key);
                     setIsDropdownOpen(false);
                   }}
-                  className={`w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors cursor-pointer ${
+                  className={`w-full text-left px-4 py-2 text-[11px] font-medium transition-colors cursor-pointer ${
                     timeRange === key ? 'bg-blue-600 text-white font-bold' : 'text-slate-300 hover:bg-white/10'
                   }`}
                 >
@@ -192,7 +191,7 @@ export default function Overview() {
       </div>
 
       {/* 1. TOP METRIC CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 relative z-10">
         
         <div className={`${liquidGlassCard} flex items-center justify-between`}>
           <div>
@@ -228,7 +227,7 @@ export default function Overview() {
       </div>
 
       {/* 2. COMPACT 2-COLUMN GRID FOR CHARTS & STATS */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 relative z-10">
 
         {/* Sales Curve Overview */}
         <div className={`${liquidGlassCard} space-y-2`}>
@@ -342,7 +341,7 @@ export default function Overview() {
       </div>
 
       {/* 3. WEEKLY ACTIVITY & HEALTH SCORE */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 relative z-10">
 
         <div className={`${liquidGlassCard} space-y-2`}>
           <div className="flex items-center justify-between">
