@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { Loader2, Store } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 
 export default function BusinessOnboarding() {
@@ -9,21 +10,17 @@ export default function BusinessOnboarding() {
     business_type: 'retail',
     goals: '',
   });
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+  const handleChange = (event) => {
+    const { name, value } = event.target;
+    setFormData((previous) => ({ ...previous, [name]: value }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setLoading(true);
     setError('');
 
@@ -33,57 +30,72 @@ export default function BusinessOnboarding() {
       localStorage.getItem('accessToken');
 
     try {
-      // 1. Sends to your live Render backend (WORKS ON ALL PHONES)
-      await axios.post(
-        `${API_BASE_URL}/api/v1/onboarding/`,
-        formData,
-        {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        }
-      );
+      await axios.post(`${API_BASE_URL}/api/v1/onboarding/`, formData, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
 
-      // 2. Mark user as onboarded in browser storage
-      const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-      localStorage.setItem('user', JSON.stringify({ ...storedUser, is_onboarded: true }));
+      let storedUser = {};
+      try {
+        storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+      } catch {
+        storedUser = {};
+      }
+
+      const updatedUser = { ...storedUser, is_onboarded: true };
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      localStorage.setItem('user_data', JSON.stringify(updatedUser));
       localStorage.setItem('is_onboarded', 'true');
+      window.dispatchEvent(new Event('duka_auth_changed'));
 
-      // 3. Enter Dashboard
       navigate('/app');
-
-    } catch (err) {
-      console.error('Onboarding submission error:', err);
-      const msg = err.response?.data?.message || err.response?.data?.error;
-      setError(msg || 'Imeshindikana kuhifadhi taarifa. Tafadhali jaribu tena.');
+    } catch (requestError) {
+      console.error('Onboarding submission error:', requestError);
+      const message =
+        requestError.response?.data?.message ||
+        requestError.response?.data?.error;
+      setError(message || 'Imeshindikana kuhifadhi taarifa. Tafadhali jaribu tena.');
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-[#f3f5f9] dark:bg-[#0a0e17] flex items-center justify-center p-4 py-12 font-sans select-none">
-      <div className="w-full max-w-[460px] bg-white dark:bg-[#151c28] rounded-3xl p-8 sm:p-10 shadow-[0_10px_35px_rgba(0,0,0,0.04)] border border-slate-200/80 dark:border-slate-800 flex flex-col">
-        
-        {/* Title */}
-        <h1 className="text-2xl font-black text-slate-900 dark:text-white text-center tracking-tight">
-          Karibu Duka Poa 🚀
-        </h1>
-        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 text-center mt-2 mb-6">
-          Tafadhali weka taarifa za biashara yako ili tuanze.
-        </p>
+  const inputClass =
+    'w-full rounded-2xl border border-white/80 bg-white/55 px-4 py-3 text-sm text-slate-900 shadow-inner outline-none backdrop-blur-xl transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-white/10 dark:bg-white/[0.05] dark:text-white dark:focus:border-blue-400';
 
-        {/* Error Alert */}
+  return (
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-100 px-4 py-12 font-sans text-slate-900 transition-colors duration-300 dark:bg-[#070a12] dark:text-white">
+      <div className="pointer-events-none absolute left-1/2 top-[-12%] h-[420px] w-[620px] -translate-x-1/2 rounded-full bg-blue-300/35 blur-[130px] dark:bg-blue-600/20" />
+      <div className="pointer-events-none absolute bottom-[-12%] right-[-8%] h-[400px] w-[400px] rounded-full bg-indigo-300/25 blur-[120px] dark:bg-indigo-600/15" />
+
+      <section className="relative w-full max-w-[480px] overflow-hidden rounded-[34px] border border-white/80 bg-white/60 p-6 shadow-[0_24px_70px_rgba(15,23,42,0.14),inset_0_1px_1px_rgba(255,255,255,0.9)] backdrop-blur-3xl dark:border-white/10 dark:bg-[#121724]/65 dark:shadow-[0_24px_70px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.12)] sm:p-9">
+        <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent dark:via-white/40" />
+
+        <div className="mb-7 text-center">
+          <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-300/50 bg-blue-500/10 text-blue-700 shadow-inner dark:border-blue-300/15 dark:text-blue-300">
+            <Store className="h-6 w-6" />
+          </span>
+          <h1 className="text-2xl font-black tracking-tight sm:text-3xl">
+            Karibu Duka Poa
+          </h1>
+          <p className="mt-2 text-xs leading-relaxed text-slate-600 dark:text-slate-400 sm:text-sm">
+            Weka taarifa za biashara yako ili tuanze.
+          </p>
+        </div>
+
         {error && (
-          <div className="mb-6 p-3.5 bg-red-50 border border-red-200 text-red-600 text-xs rounded-xl font-bold text-center">
+          <div
+            role="alert"
+            className="mb-5 rounded-2xl border border-rose-300/70 bg-rose-100/60 p-3.5 text-center text-xs font-bold text-rose-700 backdrop-blur-xl dark:border-rose-400/20 dark:bg-rose-950/35 dark:text-rose-300"
+          >
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Business Name */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1.5">
-              Jina la Biashara (Business Name)
-            </label>
+          <label className="block">
+            <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              Jina la Biashara
+            </span>
             <input
               type="text"
               name="business_name"
@@ -91,21 +103,20 @@ export default function BusinessOnboarding() {
               value={formData.business_name}
               onChange={handleChange}
               placeholder="Mf. Richimart"
-              className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={inputClass}
             />
-          </div>
+          </label>
 
-          {/* Business Type */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1.5">
-              Aina ya Biashara (Business Type)
-            </label>
+          <label className="block">
+            <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              Aina ya Biashara
+            </span>
             <select
               name="business_type"
               required
               value={formData.business_type}
               onChange={handleChange}
-              className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={inputClass}
             >
               <option value="retail">Duka la Rejareja (Retail Shop)</option>
               <option value="wholesale">Duka la Jumla (Wholesale)</option>
@@ -113,35 +124,38 @@ export default function BusinessOnboarding() {
               <option value="pharmacy">Duka la Dawa (Pharmacy)</option>
               <option value="other">Nyinginezo (Other)</option>
             </select>
-          </div>
+          </label>
 
-          {/* Business Goals */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-1.5">
-              Malengo yako kwenye Biashara Hii (Business Goals)
-            </label>
+          <label className="block">
+            <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              Malengo ya Biashara
+            </span>
             <textarea
               name="goals"
               rows={3}
               value={formData.goals}
               onChange={handleChange}
               placeholder="Mf. Kuongeza mauzo na kufuatilia bidhaa..."
-              className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              className={`${inputClass} resize-none`}
             />
-          </div>
+          </label>
 
-          {/* Submit Button */}
-          <div className="pt-2">
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-full shadow-md shadow-blue-600/25 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
-            >
-              {loading ? 'Inahifadhi...' : 'Endelea kwenye Dashboard ➔'}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3.5 text-xs font-black text-white shadow-lg shadow-blue-600/25 transition hover:scale-[1.01] hover:bg-blue-500 active:scale-95 disabled:cursor-wait disabled:opacity-60"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Inahifadhi...
+              </>
+            ) : (
+              'Endelea kwenye Dashboard ➔'
+            )}
+          </button>
         </form>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
