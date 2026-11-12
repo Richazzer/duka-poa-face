@@ -1,7 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, Moon, Sun } from 'lucide-react';
-import { getTheme, setTheme } from '../utils/theme';
+import { Loader2 } from 'lucide-react';
 
 const AUTO_CONTINUE_MS = 4000;
 
@@ -25,15 +24,6 @@ const hasSession = () => {
 
 export default function WelcomeSplash() {
   const navigate = useNavigate();
-  const [theme, setCurrentTheme] = useState('dark');
-
-  useEffect(() => {
-    const syncTheme = () => setCurrentTheme(getTheme());
-
-    syncTheme();
-    window.addEventListener('theme_change', syncTheme);
-    return () => window.removeEventListener('theme_change', syncTheme);
-  }, []);
 
   const firstName = useMemo(() => {
     const email = readUser()?.email || '';
@@ -58,12 +48,6 @@ export default function WelcomeSplash() {
     return () => window.clearTimeout(timer);
   }, [navigate]);
 
-  const toggleTheme = () => {
-    const nextTheme = theme === 'dark' ? 'light' : 'dark';
-    setTheme(nextTheme);
-    setCurrentTheme(nextTheme);
-  };
-
   const continueToOnboarding = () => {
     navigate('/onboarding/splash', { replace: true });
   };
@@ -73,19 +57,6 @@ export default function WelcomeSplash() {
       <div className="pointer-events-none absolute left-1/2 top-[-12%] h-[430px] w-[620px] -translate-x-1/2 rounded-full bg-blue-300/35 blur-[130px] dark:bg-blue-600/20" />
       <div className="pointer-events-none absolute bottom-[-12%] right-[-10%] h-[400px] w-[400px] rounded-full bg-indigo-300/30 blur-[120px] dark:bg-indigo-600/15" />
 
-      <button
-        type="button"
-        onClick={toggleTheme}
-        aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
-        className="absolute right-5 top-5 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/60 text-slate-700 shadow-lg backdrop-blur-2xl transition hover:scale-105 dark:border-white/10 dark:bg-white/[0.07] dark:text-slate-200"
-      >
-        {theme === 'dark' ? (
-          <Sun className="h-5 w-5 text-amber-500" />
-        ) : (
-          <Moon className="h-5 w-5 text-blue-700" />
-        )}
-      </button>
-
       <section className="relative w-full max-w-[460px] overflow-hidden rounded-[34px] border border-white/80 bg-white/60 p-8 text-center shadow-[0_24px_70px_rgba(15,23,42,0.14),inset_0_1px_1px_rgba(255,255,255,0.9)] backdrop-blur-3xl dark:border-white/10 dark:bg-[#121724]/65 dark:shadow-[0_24px_70px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.12)] sm:p-10">
         <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent dark:via-white/40" />
 
@@ -93,7 +64,7 @@ export default function WelcomeSplash() {
           <span className="text-3xl" aria-hidden="true">🏪</span>
         </div>
 
-        <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-blue-300/60 bg-blue-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-blue-800 dark:border-blue-400/20 dark:text-blue-300">
+        <p className="mb-3 inline-flex items-center rounded-full border border-blue-300/60 bg-blue-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-blue-800 dark:border-blue-400/20 dark:text-blue-300">
           Duka Poa POS
         </p>
 
