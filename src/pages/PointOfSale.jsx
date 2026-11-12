@@ -1,23 +1,24 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  Search, 
-  ShoppingCart, 
-  Plus, 
-  Minus, 
-  Trash2, 
-  CheckCircle2, 
-  RefreshCw, 
-  Store, 
-  PauseCircle, 
+import {
+  Search,
+  ShoppingCart,
+  Plus,
+  Minus,
+  Trash2,
+  CheckCircle2,
+  RefreshCw,
+  Store,
+  PauseCircle,
   PlayCircle,
   Printer,
   Share2,
-  X,
-  CreditCard,
-  Phone
+  Receipt,
+  Clock
 } from 'lucide-react';
 import Modal from '../components/common/Modal';
 import { api } from '../config';
+
+const RECEIPTS_STORAGE_KEY = 'duka_saved_receipts';
 
 export default function PointOfSale() {
   const [products, setProducts] = useState([]);
@@ -29,18 +30,29 @@ export default function PointOfSale() {
   // Hold / Resume Sale Feature
   const [heldCarts, setHeldCarts] = useState([]);
 
+  // Saved Receipts Vault (Synced with Django /sales/ + LocalStorage)
+  const [savedReceipts, setSavedReceipts] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(RECEIPTS_STORAGE_KEY) || '[]');
+    } catch {
+      return [];
+    }
+  });
+  const [isReceiptsModalOpen, setIsReceiptsModalOpen] = useState(false);
+  const [receiptSearch, setReceiptSearch] = useState('');
+
   // Modals
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [completedSale, setCompletedSale] = useState(null);
 
   // Payment Options for Tanzania
-  const [paymentMethod, setPaymentMethod] = useState('Cash'); // Cash, M-Pesa, Airtel Money, Mixx by Yas, Deni
+  const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [cashTendered, setCashTendered] = useState('');
   const [discountAmount, setDiscountAmount] = useState('');
 
-  // 1. Fetch Real Products from Database
+  // 1. Fetch Real Products & Sync Past Sales Receipts from Database
   const fetchProducts = async () => {
     setLoading(true);
     try {
@@ -53,9 +65,55 @@ export default function PointOfSale() {
     }
   };
 
+  const fetchSavedReceipts = async () => {
+    try {
+      const res = await api.get('/sales/');
+      const backendSales = Array.isArray(res.data) ? res.data : [];
+      if (backendSales.length > 0) {
+        const localMap = new Map(savedReceipts.map((r) => [String(r.id), r]));
+        const merged = backendSales.map((s) => {
+          const existing = localMap.get(String(s.id));
+          return {
+            id: s.id,
+            customer_name: s.customer_name || existing?.customer_name || 'Mteja wa Kawaida',
+            payment_method: s.payment_method || existing?.payment_method || 'Cash',
+            total_amount: Number(s.total_amount || s.amount || existing?.total_amount || 0),
+            items: s.items || existing?.items || [],
+            time: s.created_at
+              ? new Date(s.created_at).toLocaleString([], {
+                  day: '2-digit',
+                  month: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })
+              : existing?.time || 'Hivi punde',
+            change: existing?.change || 0
+          };
+        });
+        setSavedReceipts(merged);
+        localStorage.setItem(RECEIPTS_STORAGE_KEY, JSON.stringify(merged.slice(0, 100)));
+      }
+    } catch (e) {
+      console.warn('Using local receipt cache:', e);
+    }
+  };
+
   useEffect(() => {
     fetchProducts();
+    fetchSavedReceipts();
   }, []);
+
+  // Helper to broadcast live updates to Overview.jsx
+  const broadcastOverviewSync = () => {
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith('duka_cached_overview') || key.includes('analytics')) {
+        localStorage.removeItem(key);
+      }
+    });
+    localStorage.setItem('duka_last_sale_ts', String(Date.now()));
+    window.dispatchEvent(new Event('duka_data_updated'));
+    window.dispatchEvent(new Event('storage'));
+  };
 
   // 2. Cart Operations
   const addToCart = (product) => {
@@ -123,17 +181,19 @@ export default function PointOfSale() {
     setHeldCarts((prev) => prev.filter((h) => h.id !== heldId));
   };
 
-  // 3. Record Sale & Sync Live with Django
+  // 3. Record Sale, Store Receipt & Sync Live with Overview.jsx
   const handleCompleteSale = async () => {
     if (cart.length === 0) return;
     setLoading(true);
 
     const salePayload = {
       total_amount: grandTotal,
+      amount: grandTotal,
       payment_method: paymentMethod,
       customer_name: customerName.trim() || 'Mteja wa Kawaida',
       items: cart.map((i) => ({
         id: i.id,
+        product_id: i.id,
         name: i.name,
         quantity: i.quantity,
         price: Number(i.price || i.selling_price || 0)
@@ -153,30 +213,44 @@ export default function PointOfSale() {
             notes: `Mauzo ya kaunta (Bidhaa ${cart.length})`,
             is_paid: false
           });
-        } catch (err) {}
+        } catch (err) {
+          console.warn('Debt ledger sync warning:', err);
+        }
       }
 
-      setCompletedSale({
+      const receiptRecord = {
         ...salePayload,
-        id: res.data?.id || `RCP-${Date.now()}`,
+        id: res.data?.id || `RCP-${Date.now().toString().slice(-6)}`,
         subtotal,
         discount,
         change: changeDue,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        phone: customerPhone.trim(),
+        time: new Date().toLocaleString([], {
+          day: '2-digit',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      };
+
+      // Save receipt into permanent Receipt Vault
+      setSavedReceipts((prev) => {
+        const updated = [receiptRecord, ...prev].slice(0, 100);
+        localStorage.setItem(RECEIPTS_STORAGE_KEY, JSON.stringify(updated));
+        return updated;
       });
 
+      setCompletedSale(receiptRecord);
       setCart([]);
       setIsCheckoutOpen(false);
       setCashTendered('');
       setDiscountAmount('');
       setCustomerName('');
       setCustomerPhone('');
-      fetchProducts();
 
-      // Trigger instant live sync on Overview tab
-      localStorage.removeItem('duka_cached_overview');
-      window.dispatchEvent(new Event('duka_data_updated'));
-
+      // Refresh stock & force Overview.jsx to pull fresh analytics
+      await fetchProducts();
+      broadcastOverviewSync();
     } catch (err) {
       alert('Imeshindikana kurekodi mauzo. Hakikisha mtandao uko sawa.');
     } finally {
@@ -184,19 +258,25 @@ export default function PointOfSale() {
     }
   };
 
-  // WhatsApp Receipt Share
-  const handleShareWhatsApp = () => {
-    if (!completedSale) return;
-    let cleanPhone = (customerPhone || '').replace(/\D/g, '');
+  // WhatsApp Receipt Share (Works for both live receipt and stored receipts)
+  const handleShareWhatsApp = (receipt = completedSale) => {
+    if (!receipt) return;
+    let cleanPhone = (receipt.phone || customerPhone || '').replace(/\D/g, '');
     if (cleanPhone.startsWith('0')) cleanPhone = '255' + cleanPhone.slice(1);
+
+    const itemsLines = (receipt.items || [])
+      .map((i) => `• ${i.name} x${i.quantity} = TZS ${(i.price * i.quantity).toLocaleString()}`)
+      .join('\n');
 
     const msg = encodeURIComponent(
       `🧾 *RISITI YA DUKA POA*\n` +
-      `Risiti Na: #${completedSale.id}\n` +
-      `Mteja: ${completedSale.customer_name}\n` +
-      `Jumla: TZS ${completedSale.total_amount.toLocaleString()}\n` +
-      `Malipo: ${completedSale.payment_method}\n` +
-      `Ahsante kwa kufanya biashara nasi!`
+        `Risiti Na: #${receipt.id}\n` +
+        `Tarehe: ${receipt.time || ''}\n` +
+        `Mteja: ${receipt.customer_name}\n` +
+        (itemsLines ? `\n*Bidhaa:*\n${itemsLines}\n\n` : '\n') +
+        `*Jumla: TZS ${Number(receipt.total_amount).toLocaleString()}*\n` +
+        `Malipo: ${receipt.payment_method}\n` +
+        `Ahsante kwa kufanya biashara nasi!`
     );
     window.open(`https://wa.me/${cleanPhone}?text=${msg}`, '_blank');
   };
@@ -212,17 +292,36 @@ export default function PointOfSale() {
     return matchSearch && matchCat;
   });
 
+  const filteredReceipts = savedReceipts.filter((r) => {
+    const q = receiptSearch.toLowerCase();
+    return (
+      String(r.id).toLowerCase().includes(q) ||
+      (r.customer_name || '').toLowerCase().includes(q) ||
+      (r.payment_method || '').toLowerCase().includes(q)
+    );
+  });
+
   return (
     <div className="max-w-6xl mx-auto space-y-4 select-none font-sans pb-32 text-slate-100">
-      
-      {/* 
-        ========================================================================
-        TOP SPEED BAR: Search, Barcode Input, Refresh, Parked Carts
-        ========================================================================
-      */}
+      {/* Print-only stylesheet so window.print() outputs a clean POS receipt */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          #printable-receipt-area, #printable-receipt-area * { visibility: visible; }
+          #printable-receipt-area {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 100%;
+            background: #ffffff !important;
+            color: #000000 !important;
+            padding: 20px;
+          }
+        }
+      `}</style>
+
+      {/* TOP SPEED BAR: Search, Saved Receipts Vault, Refresh */}
       <div className="bg-[#131926]/90 backdrop-blur-3xl p-4 rounded-[26px] border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.25)] flex flex-col sm:flex-row items-center justify-between gap-3">
-        
-        {/* Search */}
         <div className="relative flex-1 w-full">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -242,6 +341,19 @@ export default function PointOfSale() {
               <span>{heldCarts.length} Zilizosimama</span>
             </div>
           )}
+
+          {/* Stored Receipts Vault Button */}
+          <button
+            onClick={() => {
+              fetchSavedReceipts();
+              setIsReceiptsModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-xs font-bold transition-all cursor-pointer"
+            title="Tazama Risiti Zote Zilizohifadhiwa"
+          >
+            <Receipt className="w-3.5 h-3.5" />
+            <span>Risiti ({savedReceipts.length})</span>
+          </button>
 
           <button
             onClick={fetchProducts}
@@ -286,20 +398,17 @@ export default function PointOfSale() {
                 className="py-1 px-3 bg-[#1a2336] border border-amber-500/40 text-xs font-bold text-white rounded-lg flex items-center gap-1.5 hover:scale-105 active:scale-95 transition-all cursor-pointer"
               >
                 <PlayCircle className="w-3.5 h-3.5 text-emerald-400" />
-                <span>{h.time} (TZS {h.total.toLocaleString()})</span>
+                <span>
+                  {h.time} (TZS {h.total.toLocaleString()})
+                </span>
               </button>
             ))}
           </div>
         </div>
       )}
 
-      {/* 
-        ========================================================================
-        MAIN SPLIT VIEW: Touch Tiles (Left) & Active Register Cart (Right)
-        ========================================================================
-      */}
+      {/* MAIN SPLIT VIEW: Touch Tiles (Left) & Active Register Cart (Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        
         {/* Large Tactile Product Tiles */}
         <div className="lg:col-span-2">
           {filtered.length === 0 ? (
@@ -338,7 +447,9 @@ export default function PointOfSale() {
                       {prod.category || 'Duka'}
                     </span>
                     <h4 className="font-bold text-sm text-white mt-1 truncate">{prod.name}</h4>
-                    <p className="text-xs font-black text-blue-400 mt-1">TZS {price.toLocaleString()}</p>
+                    <p className="text-xs font-black text-blue-400 mt-1">
+                      TZS {price.toLocaleString()}
+                    </p>
                     <span className="text-[10px] text-slate-500 block mt-2">Stock: {stock}</span>
                   </div>
                 );
@@ -353,7 +464,7 @@ export default function PointOfSale() {
             <h2 className="font-black text-white text-sm flex items-center gap-2">
               <ShoppingCart className="w-4 h-4 text-blue-400" /> Orodha ya Mauzo
             </h2>
-            
+
             {cart.length > 0 && (
               <div className="flex items-center gap-2">
                 <button
@@ -363,8 +474,8 @@ export default function PointOfSale() {
                 >
                   <PauseCircle className="w-4 h-4" />
                 </button>
-                <button 
-                  onClick={() => setCart([])} 
+                <button
+                  onClick={() => setCart([])}
                   className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/10 transition-colors"
                   title="Futa Cart"
                 >
@@ -382,24 +493,28 @@ export default function PointOfSale() {
               </p>
             ) : (
               cart.map((item) => (
-                <div key={item.id} className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-[#192132]">
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-[#192132]"
+                >
                   <div className="flex-1 truncate mr-2">
                     <p className="font-bold text-white truncate">{item.name}</p>
                     <p className="text-slate-400 text-[11px]">
-                      TZS {Number(item.price || item.selling_price || 0).toLocaleString()} x {item.quantity}
+                      TZS {Number(item.price || item.selling_price || 0).toLocaleString()} x{' '}
+                      {item.quantity}
                     </p>
                   </div>
-                  
+
                   <div className="flex items-center gap-1.5">
-                    <button 
-                      onClick={() => updateQuantity(item.id, -1)} 
+                    <button
+                      onClick={() => updateQuantity(item.id, -1)}
                       className="p-1 rounded-md bg-[#232d42] text-slate-300 hover:text-white"
                     >
                       <Minus className="w-3 h-3" />
                     </button>
                     <span className="font-bold w-4 text-center text-white">{item.quantity}</span>
-                    <button 
-                      onClick={() => updateQuantity(item.id, 1)} 
+                    <button
+                      onClick={() => updateQuantity(item.id, 1)}
                       className="p-1 rounded-md bg-[#232d42] text-slate-300 hover:text-white"
                     >
                       <Plus className="w-3 h-3" />
@@ -444,18 +559,15 @@ export default function PointOfSale() {
             </button>
           </div>
         </div>
-
       </div>
 
-      {/* 
-        ========================================================================
-        CHECKOUT MODAL (Tanzania Payment Options & Cash Chenji Calculator)
-        ========================================================================
-      */}
-      <Modal isOpen={isCheckoutOpen} onClose={() => setIsCheckoutOpen(false)} title="Kamilisha Malipo">
+      {/* CHECKOUT MODAL */}
+      <Modal
+        isOpen={isCheckoutOpen}
+        onClose={() => setIsCheckoutOpen(false)}
+        title="Kamilisha Malipo"
+      >
         <div className="space-y-4">
-          
-          {/* Customer Name */}
           <div>
             <label className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
               Jina la Mteja (Hiari)
@@ -469,7 +581,6 @@ export default function PointOfSale() {
             />
           </div>
 
-          {/* Payment Method Selector (Tanzania Specific) */}
           <div>
             <label className="block text-xs font-bold text-slate-300 mb-2 uppercase tracking-wider">
               Njia ya Malipo (Tanzania)
@@ -480,7 +591,7 @@ export default function PointOfSale() {
                 { id: 'M-Pesa', label: 'M-Pesa' },
                 { id: 'Airtel Money', label: 'Airtel' },
                 { id: 'Mixx by Yas', label: 'Mixx (Tigo)' },
-                { id: 'Deni', label: 'Deni (Credit)' },
+                { id: 'Deni', label: 'Deni (Credit)' }
               ].map((m) => (
                 <button
                   key={m.id}
@@ -498,13 +609,12 @@ export default function PointOfSale() {
             </div>
           </div>
 
-          {/* Cash Change Calculator */}
           {paymentMethod === 'Cash' && (
             <div className="p-3.5 bg-[#192132] rounded-2xl space-y-2 border border-slate-700">
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                 Pesa Iliyotolewa na Mteja (TZS)
               </label>
-              
+
               <input
                 type="number"
                 placeholder={`Mf. ${grandTotal.toLocaleString()}`}
@@ -513,7 +623,6 @@ export default function PointOfSale() {
                 className="w-full px-3 py-2 rounded-xl bg-[#121722] border border-slate-700 text-white font-bold text-sm outline-none"
               />
 
-              {/* Fast Bill Tap Chips */}
               <div className="flex gap-1.5 pt-1">
                 {[grandTotal, 2000, 5000, 10000, 20000, 50000]
                   .filter((v, i, a) => v >= grandTotal && a.indexOf(v) === i)
@@ -539,7 +648,6 @@ export default function PointOfSale() {
             </div>
           )}
 
-          {/* Customer Phone for WhatsApp if Deni */}
           {paymentMethod === 'Deni' && (
             <div>
               <label className="block text-xs font-bold text-amber-400 mb-1 uppercase tracking-wider">
@@ -557,7 +665,9 @@ export default function PointOfSale() {
 
           <div className="p-3 bg-blue-950/40 rounded-xl flex justify-between text-xs font-bold border border-blue-800/40">
             <span className="text-slate-300">Jumla ya Mauzo:</span>
-            <span className="text-blue-400 text-sm font-black">TZS {grandTotal.toLocaleString()}</span>
+            <span className="text-blue-400 text-sm font-black">
+              TZS {grandTotal.toLocaleString()}
+            </span>
           </div>
 
           <button
@@ -570,32 +680,58 @@ export default function PointOfSale() {
         </div>
       </Modal>
 
-      {/* 
-        ========================================================================
-        DIGITAL RECEIPT MODAL (Printable & Shareable via WhatsApp)
-        ========================================================================
-      */}
+      {/* DIGITAL RECEIPT MODAL (Printable & Shareable via WhatsApp) */}
       {completedSale && (
         <Modal isOpen={true} onClose={() => setCompletedSale(null)} title="Risiti ya Mauzo">
-          <div className="space-y-4 text-center py-2">
+          <div id="printable-receipt-area" className="space-y-4 text-center py-2">
             <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
             <div>
-              <h3 className="font-black text-lg text-white">Mauzo Yamerekodiwa!</h3>
-              <p className="text-xs text-slate-400">Risiti Na: #{completedSale.id}</p>
+              <h3 className="font-black text-lg text-white">DUKA POA RECEIPT</h3>
+              <p className="text-xs text-slate-400">
+                Risiti Na: #{completedSale.id} • {completedSale.time}
+              </p>
             </div>
 
             <div className="p-4 bg-[#192132] rounded-2xl text-left text-xs space-y-2 border border-slate-800">
-              <div className="flex justify-between"><span className="text-slate-400">Mteja:</span> <span className="font-bold text-white">{completedSale.customer_name}</span></div>
-              <div className="flex justify-between"><span className="text-slate-400">Malipo:</span> <span className="font-bold text-white">{completedSale.payment_method}</span></div>
-              <div className="flex justify-between"><span className="text-slate-400">Jumla:</span> <span className="font-black text-blue-400 text-sm">TZS {completedSale.total_amount.toLocaleString()}</span></div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Mteja:</span>
+                <span className="font-bold text-white">{completedSale.customer_name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Malipo:</span>
+                <span className="font-bold text-white">{completedSale.payment_method}</span>
+              </div>
+
+              {Array.isArray(completedSale.items) && completedSale.items.length > 0 && (
+                <div className="border-t border-slate-700/80 pt-2 space-y-1">
+                  {completedSale.items.map((item, idx) => (
+                    <div key={idx} className="flex justify-between text-[11px] text-slate-300">
+                      <span>
+                        {item.name} x{item.quantity}
+                      </span>
+                      <span>TZS {(Number(item.price) * Number(item.quantity)).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex justify-between border-t border-slate-700/80 pt-2">
+                <span className="text-slate-400">Jumla:</span>
+                <span className="font-black text-blue-400 text-sm">
+                  TZS {Number(completedSale.total_amount).toLocaleString()}
+                </span>
+              </div>
+
               {completedSale.change > 0 && (
                 <div className="flex justify-between text-emerald-400 font-bold border-t border-slate-700 pt-1.5">
-                  <span>Chenji:</span> <span>TZS {completedSale.change.toLocaleString()}</span>
+                  <span>Chenji:</span>
+                  <span>TZS {Number(completedSale.change).toLocaleString()}</span>
                 </div>
               )}
             </div>
+          </div>
 
-            {/* Action buttons */}
+          <div className="space-y-2 mt-2">
             <div className="flex gap-2">
               <button
                 onClick={() => window.print()}
@@ -605,15 +741,15 @@ export default function PointOfSale() {
               </button>
 
               <button
-                onClick={handleShareWhatsApp}
+                onClick={() => handleShareWhatsApp(completedSale)}
                 className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Share2 className="w-4 h-4" /> WhatsApp
               </button>
             </div>
 
-            <button 
-              onClick={() => setCompletedSale(null)} 
+            <button
+              onClick={() => setCompletedSale(null)}
               className="w-full py-3 bg-white text-slate-900 rounded-full text-xs font-black hover:bg-slate-100 cursor-pointer"
             >
               Mteja Mwingine (Next Sale) ➔
@@ -622,6 +758,77 @@ export default function PointOfSale() {
         </Modal>
       )}
 
+      {/* STORED RECEIPTS VAULT MODAL (Where all receipts are saved & viewable) */}
+      <Modal
+        isOpen={isReceiptsModalOpen}
+        onClose={() => setIsReceiptsModalOpen(false)}
+        title={`Kumbukumbu za Risiti (${savedReceipts.length})`}
+      >
+        <div className="space-y-3">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Tafuta risiti kwa namba, mteja, au malipo..."
+              value={receiptSearch}
+              onChange={(e) => setReceiptSearch(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 rounded-xl bg-[#1a2336] border border-slate-700 text-xs text-white outline-none"
+            />
+          </div>
+
+          <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
+            {filteredReceipts.length === 0 ? (
+              <p className="text-xs text-slate-400 text-center py-8">
+                Hakuna risiti zilizohifadhiwa bado.
+              </p>
+            ) : (
+              filteredReceipts.map((rcp) => (
+                <div
+                  key={rcp.id}
+                  className="p-3 rounded-xl bg-[#192132] border border-slate-800 flex items-center justify-between gap-2 text-xs"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-blue-400">#{rcp.id}</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
+                        {rcp.payment_method}
+                      </span>
+                    </div>
+                    <p className="font-bold text-white truncate mt-0.5">{rcp.customer_name}</p>
+                    <p className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                      <Clock className="w-3 h-3" /> {rcp.time}
+                    </p>
+                  </div>
+
+                  <div className="text-right shrink-0 space-y-1.5">
+                    <p className="font-black text-emerald-400">
+                      TZS {Number(rcp.total_amount).toLocaleString()}
+                    </p>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        onClick={() => {
+                          setIsReceiptsModalOpen(false);
+                          setCompletedSale(rcp);
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-[#232d42] hover:bg-slate-700 text-[10px] font-bold text-white cursor-pointer"
+                      >
+                        Fungua / Print
+                      </button>
+                      <button
+                        onClick={() => handleShareWhatsApp(rcp)}
+                        className="p-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 cursor-pointer"
+                        title="Tuma WhatsApp"
+                      >
+                        <Share2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
