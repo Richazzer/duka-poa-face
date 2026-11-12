@@ -52,7 +52,9 @@ export default function Customers() {
   }, []);
 
   // 2. Save new debt using central api config & broadcast sync
-  const handleCreateDebt = async (e) => {
+
+
+const handleCreateDebt = async (e) => {
     e.preventDefault();
     setLoading(true);
 
@@ -60,13 +62,11 @@ export default function Customers() {
     const cleanName = form.customer_name.trim();
     const cleanPhone = form.phone.trim();
 
+    // Clean payload matching standard Django Debt models
     const payload = {
       customer_name: cleanName,
-      name: cleanName,
       amount_owed: amountNum,
-      amount: amountNum,
       phone: cleanPhone,
-      customer_phone: cleanPhone,
       notes: form.notes?.trim() || 'Deni la bidhaa',
       is_paid: false
     };
@@ -77,7 +77,6 @@ export default function Customers() {
       setIsOpen(false);
       setForm({ customer_name: '', amount: '', phone: '', notes: '' });
 
-      // Trigger live updates across Overview & POS
       window.dispatchEvent(new Event('duka_sync'));
       window.dispatchEvent(new Event('duka_data_updated'));
       window.dispatchEvent(new Event('storage'));
@@ -89,7 +88,7 @@ export default function Customers() {
       setLoading(false);
     }
   };
-
+  
   // 3. Mark debt as paid
   const handleMarkPaid = async (id) => {
     try {
