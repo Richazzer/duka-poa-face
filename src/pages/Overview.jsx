@@ -4,7 +4,6 @@ import {
   Users, 
   TrendingUp, 
   TrendingDown, 
-  Package, 
   HeartPulse, 
   Boxes,
   Calendar,
@@ -30,12 +29,13 @@ export default function Overview() {
   });
   const [loading, setLoading] = useState(true);
 
-  // Fetch real analytics data safely with timeRange query support
+  // Fetch real analytics & sales data dynamically
   const fetchRealData = async () => {
     try {
-      const [analyticsRes, productsRes] = await Promise.allSettled([
+      const [analyticsRes, productsRes, salesRes] = await Promise.allSettled([
         api.get(`/analytics/economics/?range=${timeRange}`),
-        api.get('/products/')
+        api.get('/products/'),
+        api.get('/sales/')
       ]);
 
       let analyticsData = {};
@@ -48,6 +48,12 @@ export default function Overview() {
         productsData = Array.isArray(productsRes.value.data) ? productsRes.value.data : (productsRes.value.data.results || []);
       }
 
+      let salesData = [];
+      if (salesRes.status === 'fulfilled' && salesRes.value?.data) {
+        salesData = Array.isArray(salesRes.value.data) ? salesRes.value.data : (salesRes.value.data.results || []);
+      }
+
+      const totalRecordedSales = salesData.reduce((sum, s) => sum + Number(s.total_amount || s.amount || 0), 0);
       const calculatedNetWorth = productsData.reduce((sum, p) => {
         const price = Number(p.price || p.selling_price || 0);
         const qty = Number(p.stock ?? p.stock_quantity ?? 0);
@@ -68,10 +74,17 @@ export default function Overview() {
         color: colors[index % colors.length]
       }));
 
+      const salesCurve = salesData.slice(-6).map((s, idx) => ({
+        date: s.created_at ? new Date(s.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : `Tukio ${idx + 1}`,
+        value: Number(s.total_amount || s.amount || 0)
+      }));
+
       setData(prev => ({
         ...prev,
         ...analyticsData,
+        today_sales: analyticsData.today_sales || totalRecordedSales,
         net_worth: analyticsData.net_worth || calculatedNetWorth,
+        sales_curve: analyticsData.sales_curve?.length ? analyticsData.sales_curve : salesCurve,
         category_breakdown: analyticsData.category_breakdown?.length ? analyticsData.category_breakdown : category_breakdown
       }));
     } catch (e) {
@@ -89,7 +102,7 @@ export default function Overview() {
     window.addEventListener('storage', handleSync);
     window.addEventListener('focus', handleSync);
 
-    const interval = setInterval(fetchRealData, 8000);
+    const interval = setInterval(fetchRealData, 6000);
     return () => {
       window.removeEventListener('duka_sync', handleSync);
       window.removeEventListener('duka_data_updated', handleSync);
@@ -108,17 +121,14 @@ export default function Overview() {
 
   const curvePoints = useMemo(() => {
     const curve = data.sales_curve?.length ? data.sales_curve : [
-      { date: '08:00', value: data.today_sales ? data.today_sales * 0.1 : 0 },
-      { date: '11:00', value: data.today_sales ? data.today_sales * 0.3 : 0 },
-      { date: '14:00', value: data.today_sales ? data.today_sales * 0.6 : 0 },
-      { date: '17:00', value: data.today_sales ? data.today_sales * 0.8 : 0 },
-      { date: '20:00', value: data.today_sales || 0 },
+      { date: 'Mwanzo', value: 0 },
+      { date: 'Sasa', value: data.today_sales || 0 }
     ];
 
-    const maxVal = Math.max(...curve.map(c => c.value), 10000);
+    const maxVal = Math.max(...curve.map(c => c.value), 1000);
     return curve.map((c, i) => {
       const x = 20 + i * (300 / Math.max(1, curve.length - 1));
-      const y = 95 - (c.value / maxVal) * 70;
+      const y = 85 - (c.value / maxVal) * 60;
       return { label: c.date, x, y, val: c.value };
     });
   }, [data.sales_curve, data.today_sales]);
@@ -137,29 +147,31 @@ export default function Overview() {
     return Math.max(...vals, 1);
   }, [data.weekly_bars]);
 
+  // Reusable Colorless Liquid Glass Card Style Class
+  const liquidGlassCard = "p-3.5 sm:p-4 rounded-[22px] bg-white/[0.03] hover:bg-white/[0.05] backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3)] transition-all";
+
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-4 select-none font-sans text-slate-100 pb-36 relative">
+    <div className="w-full max-w-7xl mx-auto space-y-3 select-none font-sans text-slate-100 pb-36 relative">
       
-      {/* HEADER WITH TIME RANGE DROPDOWN */}
-      <div className="flex items-center justify-between bg-[#131926]/90 backdrop-blur-3xl p-4 rounded-[24px] border border-white/10 shadow-sm">
+      {/* CLEAN COMPACT HEADER & DROPDOWN */}
+      <div className={`flex items-center justify-between ${liquidGlassCard} px-4 py-3`}>
         <div>
-          <h2 className="text-sm sm:text-base font-black text-white">Muhtasari wa Biashara</h2>
-          <p className="text-[11px] text-slate-400">Takwimu na mienendo halisi ya duka lako</p>
+          <h2 className="text-xs sm:text-sm font-black text-white">Muhtasari wa Biashara</h2>
+          <p className="text-[10px] text-slate-400">Takwimu halisi za duka lako</p>
         </div>
 
-        {/* Dropdown Selector */}
         <div className="relative">
           <button
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#1a2336] hover:bg-[#222d44] border border-slate-700/80 text-xs font-bold text-slate-200 transition-all cursor-pointer shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 text-[11px] font-bold text-slate-200 transition-all cursor-pointer shadow-sm"
           >
-            <Calendar className="w-3.5 h-3.5 text-blue-400" />
+            <Calendar className="w-3 h-3 text-blue-400" />
             <span>{rangeLabels[timeRange]}</span>
-            <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
           </button>
 
           {isDropdownOpen && (
-            <div className="absolute right-0 mt-2 w-36 rounded-2xl bg-[#182030] border border-slate-700 shadow-2xl py-1.5 z-50 animate-fadeIn">
+            <div className="absolute right-0 mt-1.5 w-32 rounded-xl bg-[#131926]/95 backdrop-blur-3xl border border-white/15 shadow-2xl py-1 z-50">
               {Object.entries(rangeLabels).map(([key, label]) => (
                 <button
                   key={key}
@@ -167,8 +179,8 @@ export default function Overview() {
                     setTimeRange(key);
                     setIsDropdownOpen(false);
                   }}
-                  className={`w-full text-left px-4 py-2 text-xs font-medium transition-colors cursor-pointer ${
-                    timeRange === key ? 'bg-blue-600 text-white font-bold' : 'text-slate-300 hover:bg-slate-800'
+                  className={`w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors cursor-pointer ${
+                    timeRange === key ? 'bg-blue-600 text-white font-bold' : 'text-slate-300 hover:bg-white/10'
                   }`}
                 >
                   {label}
@@ -180,85 +192,85 @@ export default function Overview() {
       </div>
 
       {/* 1. TOP METRIC CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         
-        <div className="p-4 sm:p-5 rounded-[24px] bg-[#131926]/90 backdrop-blur-3xl border border-white/10 shadow-sm flex items-center justify-between">
+        <div className={`${liquidGlassCard} flex items-center justify-between`}>
           <div>
-            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Wateja Wote ({rangeLabels[timeRange]})</p>
-            <h3 className="text-xl sm:text-2xl font-black text-white mt-1">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Wateja Wote</p>
+            <h3 className="text-lg sm:text-xl font-black text-white mt-0.5">
               {data.total_customers.toLocaleString()}
             </h3>
-            <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1 mt-1">
-              <TrendingUp className="w-3.5 h-3.5" /> {data.customer_growth > 0 ? `+${data.customer_growth}%` : 'Haijabadilika'}
+            <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1 mt-0.5">
+              <TrendingUp className="w-3 h-3" /> {data.customer_growth > 0 ? `+${data.customer_growth}%` : 'Imetulia'}
             </span>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center">
-            <Users className="w-6 h-6" />
+          <div className="w-10 h-10 rounded-xl bg-white/[0.06] border border-white/10 text-indigo-400 flex items-center justify-center">
+            <Users className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="p-4 sm:p-5 rounded-[24px] bg-[#131926]/90 backdrop-blur-3xl border border-white/10 shadow-sm flex items-center justify-between">
+        <div className={`${liquidGlassCard} flex items-center justify-between`}>
           <div>
-            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Mauzo ({rangeLabels[timeRange]})</p>
-            <h3 className="text-xl sm:text-2xl font-black text-white mt-1">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Mauzo ({rangeLabels[timeRange]})</p>
+            <h3 className="text-lg sm:text-xl font-black text-white mt-0.5">
               TZS {data.today_sales.toLocaleString()}
             </h3>
-            <span className={`text-[11px] font-bold flex items-center gap-1 mt-1 ${data.sales_growth >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {data.sales_growth >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+            <span className={`text-[10px] font-bold flex items-center gap-1 mt-0.5 ${data.sales_growth >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {data.sales_growth >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
               {data.sales_growth >= 0 ? `+${data.sales_growth}%` : `${data.sales_growth}%`}
             </span>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-blue-600/20 text-blue-400 flex items-center justify-center">
-            <ShoppingCart className="w-6 h-6" />
+          <div className="w-10 h-10 rounded-xl bg-white/[0.06] border border-white/10 text-blue-400 flex items-center justify-center">
+            <ShoppingCart className="w-5 h-5" />
           </div>
         </div>
 
       </div>
 
-      {/* 2. DESKTOP 2-COLUMN GRID FOR CHARTS & STATS */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* 2. COMPACT 2-COLUMN GRID FOR CHARTS & STATS */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
 
         {/* Sales Curve Overview */}
-        <div className="p-5 rounded-[28px] bg-[#131926]/90 backdrop-blur-3xl border border-white/10 shadow-sm space-y-3">
+        <div className={`${liquidGlassCard} space-y-2`}>
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-black text-white">Mwenendo wa Mauzo</h2>
-              <p className="text-[11px] text-slate-400">Grafu ya mauzo ya {rangeLabels[timeRange].toLowerCase()}</p>
+              <h2 className="text-xs font-black text-white">Mwenendo wa Mauzo</h2>
+              <p className="text-[10px] text-slate-400">Grafu ya {rangeLabels[timeRange].toLowerCase()}</p>
             </div>
-            <div className="bg-[#1a2336] text-blue-400 font-mono text-xs font-black px-3 py-1.5 rounded-xl border border-slate-700">
+            <div className="bg-white/[0.06] border border-white/10 text-blue-400 font-mono text-[11px] font-black px-2.5 py-1 rounded-xl">
               TZS {data.today_sales.toLocaleString()}
             </div>
           </div>
 
-          <div className="relative pt-2 pb-1">
-            <svg viewBox="0 0 340 115" className="w-full h-auto overflow-visible">
+          <div className="relative pt-1 pb-1">
+            <svg viewBox="0 0 340 90" className="w-full h-auto overflow-visible">
               <defs>
                 <linearGradient id="realGlow" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#6366f1" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="#6366f1" stopOpacity="0.0" />
+                  <stop offset="0%" stopColor="#818cf8" stopOpacity="0.3" />
+                  <stop offset="100%" stopColor="#818cf8" stopOpacity="0.0" />
                 </linearGradient>
               </defs>
 
-              {[25, 55, 85].map((y, i) => (
-                <line key={i} x1="10" y1={y} x2="330" y2={y} stroke="#1e293b" strokeDasharray="3 3" strokeWidth="1" />
+              {[20, 45, 70].map((y, i) => (
+                <line key={i} x1="10" y1={y} x2="330" y2={y} stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" strokeWidth="1" />
               ))}
 
               <path
-                d={`${curvePath} L ${curvePoints[curvePoints.length - 1].x},100 L ${curvePoints[0].x},100 Z`}
+                d={`${curvePath} L ${curvePoints[curvePoints.length - 1].x},80 L ${curvePoints[0].x},80 Z`}
                 fill="url(#realGlow)"
               />
               <path
                 d={curvePath}
                 fill="none"
                 stroke="#818cf8"
-                strokeWidth="2.5"
+                strokeWidth="2"
                 strokeLinecap="round"
               />
 
               {curvePoints.map((p, i) => (
                 <g key={i}>
-                  <circle cx={p.x} cy={p.y} r="3" fill="#6366f1" stroke="#ffffff" strokeWidth="1.5" />
-                  <text x={p.x} y="110" textAnchor="middle" className="text-[9px] fill-slate-400 font-mono">{p.label}</text>
+                  <circle cx={p.x} cy={p.y} r="2.5" fill="#818cf8" stroke="#ffffff" strokeWidth="1" />
+                  <text x={p.x} y="88" textAnchor="middle" className="text-[8px] fill-slate-400 font-mono">{p.label}</text>
                 </g>
               ))}
             </svg>
@@ -266,20 +278,20 @@ export default function Overview() {
         </div>
 
         {/* Categories Breakdown */}
-        <div className="p-5 rounded-[28px] bg-[#131926]/90 backdrop-blur-3xl border border-white/10 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <h2 className="text-sm font-black text-white">Kategoria Zilizopo</h2>
-            <span className="text-[11px] font-bold text-slate-400">Thamani ya Bidhaa</span>
+        <div className={`${liquidGlassCard} space-y-2.5`}>
+          <div className="flex items-center justify-between border-b border-white/10 pb-2">
+            <h2 className="text-xs font-black text-white">Kategoria Zilizopo</h2>
+            <span className="text-[10px] font-bold text-slate-400">Thamani</span>
           </div>
 
           {data.category_breakdown.length === 0 ? (
-            <div className="py-8 text-center text-xs text-slate-500 space-y-1">
-              <Boxes className="w-8 h-8 mx-auto text-slate-600" />
-              <p>Bado hujaweka bidhaa zenye kategoria stoo.</p>
+            <div className="py-6 text-center text-xs text-slate-500 space-y-1">
+              <Boxes className="w-6 h-6 mx-auto text-slate-600" />
+              <p>Hakuna kategoria stoo bado.</p>
             </div>
           ) : (
-            <div className="flex items-center justify-around gap-4 py-1">
-              <div className="relative w-24 h-24 shrink-0 flex items-center justify-center">
+            <div className="flex items-center justify-around gap-3">
+              <div className="relative w-20 h-20 shrink-0 flex items-center justify-center">
                 <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
                   {(() => {
                     let accumulatedOffset = 0;
@@ -298,7 +310,7 @@ export default function Overview() {
                           r="38"
                           fill="transparent"
                           stroke={cat.color}
-                          strokeWidth="12"
+                          strokeWidth="10"
                           strokeDasharray={strokeDasharray}
                           strokeDashoffset={strokeDashoffset}
                         />
@@ -307,19 +319,19 @@ export default function Overview() {
                   })()}
                 </svg>
                 <div className="absolute text-center">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Stoo</span>
-                  <span className="text-xs font-black text-white">100%</span>
+                  <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block">Stoo</span>
+                  <span className="text-[11px] font-black text-white">100%</span>
                 </div>
               </div>
 
-              <div className="flex-1 space-y-2 max-h-24 overflow-y-auto scrollbar-none">
+              <div className="flex-1 space-y-1.5 max-h-20 overflow-y-auto scrollbar-none">
                 {data.category_breakdown.map((cat, i) => (
                   <div key={i} className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }}></span>
-                      <span className="text-slate-300 font-medium text-xs truncate max-w-[120px]">{cat.name}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }}></span>
+                      <span className="text-slate-300 font-medium text-[11px] truncate max-w-[100px]">{cat.name}</span>
                     </div>
-                    <span className="font-mono font-bold text-white text-xs">{cat.percent}%</span>
+                    <span className="font-mono font-bold text-white text-[11px]">{cat.percent}%</span>
                   </div>
                 ))}
               </div>
@@ -330,57 +342,57 @@ export default function Overview() {
       </div>
 
       {/* 3. WEEKLY ACTIVITY & HEALTH SCORE */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
 
-        <div className="p-5 rounded-[28px] bg-[#131926]/90 backdrop-blur-3xl border border-white/10 shadow-sm space-y-3">
+        <div className={`${liquidGlassCard} space-y-2`}>
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-black text-white">Mzunguko wa Mauzo ({rangeLabels[timeRange]})</h2>
-            <span className="text-[11px] font-bold text-slate-400">Vipimo vya Mwenendo</span>
+            <h2 className="text-xs font-black text-white">Mzunguko wa Mauzo</h2>
+            <span className="text-[10px] font-bold text-slate-400">Vipimo</span>
           </div>
 
-          <div className="flex items-end justify-between h-24 pt-2 px-2 gap-2">
+          <div className="flex items-end justify-between h-20 pt-2 px-1 gap-1.5">
             {(data.weekly_bars && data.weekly_bars.length > 0 ? data.weekly_bars : [
               { day: '1', value: 10 }, { day: '2', value: 25 }, { day: '3', value: 40 },
               { day: '4', value: 30 }, { day: '5', value: 60 }, { day: '6', value: 80 }, { day: '7', value: 50 }
             ]).map((bar, i) => {
               const heightPct = bar.value > 0 ? Math.max(12, Math.round((bar.value / maxBarValue) * 100)) : 6;
               return (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
+                <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
                   <div 
-                    className={`w-full max-w-[16px] rounded-t-lg transition-all ${
+                    className={`w-full max-w-[14px] rounded-t-md transition-all ${
                       bar.value > 0 
-                        ? 'bg-gradient-to-t from-indigo-700 to-purple-500 shadow-md shadow-indigo-600/30' 
-                        : 'bg-slate-800/80'
+                        ? 'bg-gradient-to-t from-indigo-500 to-purple-400 shadow-sm shadow-indigo-500/20' 
+                        : 'bg-white/10'
                     }`}
                     style={{ height: `${heightPct}%` }}
                   ></div>
-                  <span className="text-[9px] font-mono text-slate-400">{bar.day}</span>
+                  <span className="text-[8px] font-mono text-slate-400">{bar.day}</span>
                 </div>
               );
             })}
           </div>
         </div>
 
-        <div className="p-5 rounded-[28px] bg-[#131926]/90 backdrop-blur-3xl border border-white/10 shadow-sm space-y-3.5">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-            <div className="flex items-center gap-2">
-              <HeartPulse className="w-4 h-4 text-emerald-400" />
-              <h3 className="text-xs font-black uppercase tracking-wider text-white">Afya ya Biashara</h3>
+        <div className={`${liquidGlassCard} space-y-2.5`}>
+          <div className="flex items-center justify-between border-b border-white/10 pb-2">
+            <div className="flex items-center gap-1.5">
+              <HeartPulse className="w-3.5 h-3.5 text-emerald-400" />
+              <h3 className="text-[11px] font-black uppercase tracking-wider text-white">Afya ya Biashara</h3>
             </div>
-            <span className="text-xs font-black text-emerald-400 font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+            <span className="text-[11px] font-black text-emerald-400 font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
               {data.health_score}/100
             </span>
           </div>
 
-          <div className="space-y-2">
-            <div className="p-3 rounded-2xl bg-[#192233] border border-slate-800/80 text-xs text-slate-300 flex items-center justify-between">
-              <span>Thamani Yote ya Biashara (Net Worth):</span>
-              <strong className="text-white font-mono text-sm">TZS {Number(data.net_worth).toLocaleString()}</strong>
+          <div className="space-y-1.5">
+            <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-[11px] text-slate-300 flex items-center justify-between">
+              <span>Thamani Yote (Net Worth):</span>
+              <strong className="text-white font-mono text-xs">TZS {Number(data.net_worth).toLocaleString()}</strong>
             </div>
 
-            <div className="p-3 rounded-2xl bg-[#192233] border border-slate-800/80 text-xs text-slate-300 flex items-center justify-between">
-              <span>Makadirio ya Faida ({rangeLabels[timeRange]}):</span>
-              <strong className="text-emerald-400 font-mono text-sm">TZS {Number(data.gross_profit).toLocaleString()}</strong>
+            <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-[11px] text-slate-300 flex items-center justify-between">
+              <span>Makadirio ya Faida:</span>
+              <strong className="text-emerald-400 font-mono text-xs">TZS {Number(data.gross_profit).toLocaleString()}</strong>
             </div>
           </div>
         </div>
