@@ -82,7 +82,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col justify-center items-center px-6 py-12 selection:bg-slate-100 font-sans">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#070a12] text-slate-900 dark:text-white flex flex-col justify-center items-center px-6 py-12 transition-colors duration-300 font-sans">
       <div className="w-full max-w-[340px] sm:max-w-[360px] flex flex-col">
         
         <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight mb-8">
