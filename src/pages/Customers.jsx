@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { 
   Users, 
   Plus, 
@@ -11,6 +10,7 @@ import {
   Clock 
 } from 'lucide-react';
 import Modal from '../components/common/Modal';
+import { api } from '../config';
 
 export default function Customers() {
   const [debts, setDebts] = useState([]);
@@ -24,12 +24,12 @@ export default function Customers() {
     notes: '' 
   });
 
-  // 1. Fetch live debts from Django API
+  // 1. Fetch live debts using central api config
   const fetchDebts = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('http://127.0.0.1:8000/api/v1/debts/');
-      setDebts(res.data || []);
+      const res = await api.get('/debts/');
+      setDebts(Array.isArray(res.data) ? res.data : (res.data.results || []));
     } catch (e) {
       console.warn('Debts fetch note:', e);
     } finally {
@@ -39,9 +39,19 @@ export default function Customers() {
 
   useEffect(() => {
     fetchDebts();
+    const handleSync = () => fetchDebts();
+    window.addEventListener('duka_sync', handleSync);
+    window.addEventListener('duka_data_updated', handleSync);
+    window.addEventListener('storage', handleSync);
+
+    return () => {
+      window.removeEventListener('duka_sync', handleSync);
+      window.removeEventListener('duka_data_updated', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
   }, []);
 
-  // 2. Save new debt using amount_owed
+  // 2. Save new debt using central api config & broadcast sync
   const handleCreateDebt = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -50,11 +60,10 @@ export default function Customers() {
     const cleanName = form.customer_name.trim();
     const cleanPhone = form.phone.trim();
 
-    // Payload includes amount_owed to match Django model requirements
     const payload = {
       customer_name: cleanName,
       name: cleanName,
-      amount_owed: amountNum, // Django required field
+      amount_owed: amountNum,
       amount: amountNum,
       phone: cleanPhone,
       customer_phone: cleanPhone,
@@ -63,10 +72,15 @@ export default function Customers() {
     };
 
     try {
-      const res = await axios.post('http://127.0.0.1:8000/api/v1/debts/', payload);
+      const res = await api.post('/debts/', payload);
       setDebts((prev) => [res.data, ...prev]);
       setIsOpen(false);
       setForm({ customer_name: '', amount: '', phone: '', notes: '' });
+
+      // Trigger live updates across Overview & POS
+      window.dispatchEvent(new Event('duka_sync'));
+      window.dispatchEvent(new Event('duka_data_updated'));
+      window.dispatchEvent(new Event('storage'));
     } catch (err) {
       console.error('Debt creation failed:', err.response?.data || err);
       const detail = err.response?.data ? JSON.stringify(err.response.data) : err.message;
@@ -79,10 +93,10 @@ export default function Customers() {
   // 3. Mark debt as paid
   const handleMarkPaid = async (id) => {
     try {
-      await axios.patch(`http://127.0.0.1:8000/api/v1/debts/${id}/`, { is_paid: true });
+      await api.patch(`/debts/${id}/`, { is_paid: true });
       setDebts((prev) => prev.map((d) => (d.id === id ? { ...d, is_paid: true } : d)));
+      window.dispatchEvent(new Event('duka_sync'));
     } catch (e) {
-      // Optimistic update fallback
       setDebts((prev) => prev.filter((d) => d.id !== id));
     }
   };
@@ -101,7 +115,6 @@ export default function Customers() {
     window.open(`https://wa.me/${rawPhone}?text=${msg}`, '_blank');
   };
 
-  // Filter unpaid debts and calculate totals safely
   const unpaidDebts = debts.filter((d) => !d.is_paid);
   const totalDebtAmount = unpaidDebts.reduce(
     (sum, d) => sum + Number(d.amount_owed ?? d.amount ?? 0), 
@@ -117,11 +130,7 @@ export default function Customers() {
   return (
     <div className="max-w-5xl mx-auto space-y-5 select-none font-sans pb-28">
       
-      {/* 
-        ========================================================================
-        1. HEADER SUMMARY & QUICK ADD BUTTON
-        ========================================================================
-      */}
+      {/* HEADER SUMMARY & QUICK ADD BUTTON */}
       <div className="bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl p-5 rounded-[28px] border border-slate-200/80 dark:border-slate-800 shadow-[0_8px_30px_rgba(0,0,0,0.02)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/50 text-[11px] font-bold text-amber-700 dark:text-amber-300 mb-2">
@@ -154,11 +163,7 @@ export default function Customers() {
         </div>
       </div>
 
-      {/* 
-        ========================================================================
-        2. SEARCH BAR
-        ========================================================================
-      */}
+      {/* SEARCH BAR */}
       <div className="relative">
         <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
         <input
@@ -170,11 +175,7 @@ export default function Customers() {
         />
       </div>
 
-      {/* 
-        ========================================================================
-        3. DEBTS CARDS LIST
-        ========================================================================
-      */}
+      {/* DEBTS CARDS LIST */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
         {filtered.length === 0 ? (
           <div className="col-span-full p-12 text-center bg-white/80 dark:bg-[#141a24]/80 rounded-[28px] border border-slate-200/80 dark:border-slate-800 space-y-2">
@@ -208,7 +209,6 @@ export default function Customers() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {/* WhatsApp Reminder Button */}
                   {phone && (
                     <button
                       onClick={() => sendWhatsAppReminder(debt)}
@@ -219,7 +219,6 @@ export default function Customers() {
                     </button>
                   )}
 
-                  {/* Mark Debt Paid Button */}
                   <button
                     onClick={() => handleMarkPaid(debt.id)}
                     className="py-2 px-4 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-emerald-600 hover:text-white text-xs font-bold transition-all active:scale-95 cursor-pointer"
@@ -233,15 +232,9 @@ export default function Customers() {
         )}
       </div>
 
-      {/* 
-        ========================================================================
-        4. HIGH-CONTRAST ADD DEBT MODAL
-        ========================================================================
-      */}
+      {/* ADD DEBT MODAL */}
       <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} title="Weka Deni la Mteja">
         <form onSubmit={handleCreateDebt} className="space-y-4">
-          
-          {/* Customer Name */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5 uppercase tracking-wider">
               Jina la Mteja
@@ -256,7 +249,6 @@ export default function Customers() {
             />
           </div>
 
-          {/* Amount Owed */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5 uppercase tracking-wider">
               Kiasi cha Deni (TZS)
@@ -271,7 +263,6 @@ export default function Customers() {
             />
           </div>
 
-          {/* Phone Number */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5 uppercase tracking-wider">
               Namba ya Simu (WhatsApp)
@@ -285,7 +276,6 @@ export default function Customers() {
             />
           </div>
 
-          {/* Notes (Optional) */}
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5 uppercase tracking-wider">
               Maelezo ya Deni (Hiari)
@@ -299,7 +289,6 @@ export default function Customers() {
             />
           </div>
 
-          {/* Submit Button */}
           <button
             type="submit"
             disabled={loading}
