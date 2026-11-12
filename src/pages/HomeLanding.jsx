@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ShoppingBag,
@@ -6,57 +6,74 @@ import {
   Sparkles,
   ArrowRight,
   ShieldCheck,
-  Store,
   BarChart3,
-  Layers,
   CheckCircle2,
-  Sun,
-  Moon,
 } from 'lucide-react';
-import { getTheme, setTheme } from '../utils/theme';
 
 export default function HomeLanding() {
   const navigate = useNavigate();
-  const [theme, setCurrentTheme] = useState('dark');
-
-  useEffect(() => {
-    const syncTheme = () => setCurrentTheme(getTheme());
-
-    syncTheme();
-    window.addEventListener('theme_change', syncTheme);
-
-    return () => window.removeEventListener('theme_change', syncTheme);
-  }, []);
-
-  const toggleTheme = () => {
-    const nextTheme = theme === 'dark' ? 'light' : 'dark';
-    setTheme(nextTheme);
-    setCurrentTheme(nextTheme);
-  };
 
   const glassPanel =
-    'border border-white/70 dark:border-white/10 bg-white/65 dark:bg-[#121724]/70 backdrop-blur-2xl shadow-[0_18px_50px_rgba(15,23,42,0.10),inset_0_1px_1px_rgba(255,255,255,0.7)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.35),inset_0_1px_1px_rgba(255,255,255,0.12)]';
+    'border border-white/70 dark:border-white/10 bg-white/60 dark:bg-[#121724]/70 backdrop-blur-2xl shadow-[0_18px_50px_rgba(15,23,42,0.10),inset_0_1px_1px_rgba(255,255,255,0.7)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.35),inset_0_1px_1px_rgba(255,255,255,0.12)]';
 
   const featureCard =
-    'rounded-[30px] p-7 sm:p-8 border border-white/70 dark:border-white/10 bg-white/55 dark:bg-[#121722]/65 backdrop-blur-2xl shadow-[0_16px_40px_rgba(15,23,42,0.08)] dark:shadow-[0_16px_40px_rgba(0,0,0,0.25)] transition-all duration-300 hover:-translate-y-1 hover:border-blue-400/60 dark:hover:border-blue-500/50';
+    'rounded-[30px] border border-white/70 bg-white/55 p-7 shadow-[0_16px_40px_rgba(15,23,42,0.08)] backdrop-blur-2xl transition-all duration-300 hover:-translate-y-1 hover:border-blue-400/60 dark:border-white/10 dark:bg-[#121722]/65 dark:shadow-[0_16px_40px_rgba(0,0,0,0.25)] dark:hover:border-blue-500/50 sm:p-8';
+
+  const metrics = [
+    {
+      title: 'Thamani ya Duka (Net Worth)',
+      amount: 'TZS 18,450,000',
+      note: 'Stoo + Mauzo + Madeni',
+      tone: 'text-emerald-700 dark:text-emerald-400',
+    },
+    {
+      title: 'Mauzo ya Leo',
+      amount: 'TZS 485,000',
+      note: '32 Miamala ya Haraka',
+      tone: 'text-blue-700 dark:text-blue-400',
+    },
+    {
+      title: 'Kipimo cha Madeni',
+      amount: 'TZS 45,000',
+      note: 'Salama (Chini ya 15%)',
+      tone: 'text-amber-700 dark:text-amber-400',
+    },
+  ];
+
+  const features = [
+    {
+      icon: ShoppingBag,
+      title: 'Kaunta ya Mauzo (POS)',
+      text: 'Kamilisha mauzo kwa haraka kwa Cash, Simu au Deni. Mfumo unapunguza stoo kiotomatiki na kutoa risiti.',
+      tone: 'bg-blue-500/10 text-blue-700 dark:text-blue-400',
+    },
+    {
+      icon: BarChart3,
+      title: 'Takwimu za Biashara',
+      text: 'Fuatilia mauzo, stoo na mwenendo wa biashara yako kupitia dashibodi rahisi kutumia.',
+      tone: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+    },
+    {
+      icon: ShieldCheck,
+      title: 'Madeni na Usalama',
+      text: 'Weka kumbukumbu za madeni ya wateja na taarifa za biashara yako katika akaunti yako.',
+      tone: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400',
+    },
+  ];
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-slate-100 font-sans text-slate-900 selection:bg-blue-600 selection:text-white transition-colors duration-300 dark:bg-[#070a12] dark:text-white">
-      {/* Soft background light */}
+    <div className="relative min-h-screen overflow-hidden bg-slate-100 font-sans text-slate-900 transition-colors duration-300 dark:bg-[#070a12] dark:text-white">
       <div className="pointer-events-none absolute left-1/2 top-0 h-[440px] w-[800px] -translate-x-1/2 rounded-full bg-gradient-to-tr from-blue-300/45 via-indigo-300/35 to-emerald-200/35 blur-[130px] dark:from-blue-600/20 dark:via-indigo-600/15 dark:to-emerald-500/15" />
       <div className="pointer-events-none absolute right-[-140px] top-[42%] h-[480px] w-[480px] rounded-full bg-blue-300/25 blur-[120px] dark:bg-blue-500/10" />
       <div className="pointer-events-none absolute bottom-[5%] left-[-150px] h-[560px] w-[560px] rounded-full bg-emerald-300/25 blur-[140px] dark:bg-emerald-500/10" />
 
-      {/* Floating glass navigation */}
       <header className="sticky top-4 z-50 mx-auto max-w-6xl px-4 sm:px-6">
-        <nav
-          className={`flex h-16 items-center justify-between rounded-full px-4 sm:px-6 ${glassPanel}`}
-        >
+        <nav className={`flex h-16 items-center justify-between rounded-full px-4 sm:px-6 ${glassPanel}`}>
           <button
             type="button"
             onClick={() => navigate('/')}
-            className="group flex items-center gap-3 text-left"
             aria-label="Duka Poa home"
+            className="group flex items-center gap-3 text-left"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-lg font-black text-white shadow-lg shadow-blue-500/25 transition-transform group-hover:scale-105">
               D
@@ -76,30 +93,20 @@ export default function HomeLanding() {
               Vipengele
             </a>
             <a href="#forex" className="transition-colors hover:text-blue-600 dark:hover:text-blue-400">
-              Takwimu za Forex
+              Takwimu za Biashara
             </a>
             <a href="#security" className="transition-colors hover:text-blue-600 dark:hover:text-blue-400">
               Usalama wa Duka
             </a>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2.5">
-            <button
-              type="button"
-              onClick={toggleTheme}
-              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
-              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/55 text-slate-700 transition hover:bg-white/80 dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10"
-            >
-              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </button>
-
+          <div className="flex items-center gap-1 sm:gap-2">
             <button
               type="button"
               onClick={() => navigate('/login')}
               className="rounded-full px-3 py-2.5 text-xs font-bold text-slate-600 transition hover:bg-white/50 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white sm:px-5"
             >
-              Sign in
+              Ingia
             </button>
             <button
               type="button"
@@ -113,11 +120,10 @@ export default function HomeLanding() {
       </header>
 
       <main className="relative z-10 mx-auto max-w-6xl space-y-24 px-6 pb-20 pt-16 sm:pt-24">
-        {/* Hero */}
         <section className="mx-auto flex max-w-3xl flex-col items-center space-y-6 text-center">
           <div className="inline-flex items-center gap-2 rounded-full border border-blue-300/70 bg-white/55 px-4 py-1.5 text-[10px] font-black uppercase tracking-wider text-blue-800 shadow-sm backdrop-blur-xl dark:border-blue-800/60 dark:bg-blue-950/50 dark:text-blue-300">
             <span className="h-2 w-2 animate-pulse rounded-full bg-blue-500 dark:bg-blue-400" />
-            Mfumo wa Kisasa wa POS & Usimamizi wa Maduka
+            Mfumo wa Kisasa wa POS na Usimamizi wa Maduka
           </div>
 
           <h1 className="text-4xl font-black leading-[1.08] tracking-tight sm:text-6xl lg:text-7xl">
@@ -129,9 +135,9 @@ export default function HomeLanding() {
           </h1>
 
           <p className="max-w-2xl text-base leading-relaxed text-slate-600 dark:text-slate-400 sm:text-lg">
-            Imeundwa maalum kwa ajili ya maduka ya Tanzania. Rekodi mauzo ya haraka,
-            dhibiti madeni ya wateja bila daftari la karatasi, na uone mwenendo wa
-            biashara yako kwa urahisi.
+            Imeundwa maalum kwa ajili ya maduka ya Tanzania. Rekodi mauzo kwa
+            haraka, dhibiti madeni ya wateja na uone mwenendo wa biashara yako
+            kwa urahisi.
           </p>
 
           <div className="flex w-full max-w-md flex-col justify-center gap-3.5 pt-3 sm:flex-row">
@@ -152,22 +158,15 @@ export default function HomeLanding() {
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-5 pt-4 text-xs font-semibold text-slate-600 dark:text-slate-400">
-            <span className="flex items-center gap-1.5">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-              Usajili wa papo hapo
-            </span>
-            <span className="flex items-center gap-1.5">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-              Cloud Database
-            </span>
-            <span className="flex items-center gap-1.5">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-              Salama kwa simu na kompyuta
-            </span>
+            {['Usajili wa papo hapo', 'Cloud Database', 'Salama kwa simu na kompyuta'].map((item) => (
+              <span key={item} className="flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                {item}
+              </span>
+            ))}
           </div>
         </section>
 
-        {/* Glass dashboard preview */}
         <section
           id="forex"
           className={`mx-auto max-w-5xl rounded-[36px] bg-gradient-to-b from-white/80 via-blue-100/35 to-white/10 p-2 sm:p-3.5 dark:from-white/10 dark:via-slate-800/40 dark:to-transparent ${glassPanel}`}
@@ -189,11 +188,7 @@ export default function HomeLanding() {
             </div>
 
             <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
-              {[
-                { title: 'Thamani ya Duka (Net Worth)', amount: 'TZS 18,450,000', note: 'Stoo + Mauzo + Madeni', tone: 'text-emerald-700 dark:text-emerald-400' },
-                { title: 'Mauzo ya Leo', amount: 'TZS 485,000', note: '32 Miamala ya Haraka', tone: 'text-blue-700 dark:text-blue-400' },
-                { title: 'Kipimo cha Madeni', amount: 'TZS 45,000', note: 'Salama (Chini ya 15%)', tone: 'text-amber-700 dark:text-amber-400' },
-              ].map((item) => (
+              {metrics.map((item) => (
                 <div
                   key={item.title}
                   className="rounded-2xl border border-white/70 bg-white/55 p-5 shadow-sm backdrop-blur-xl dark:border-slate-700/70 dark:bg-[#141a26]/80"
@@ -218,7 +213,7 @@ export default function HomeLanding() {
                 </span>
                 <div>
                   <p className="text-xs font-black text-slate-800 dark:text-white">
-                    Mwelekeo wa Soko la Mauzo
+                    Mwelekeo wa Mauzo
                   </p>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
                     Angalia mwenendo wa mauzo yako kwa muhtasari.
@@ -232,7 +227,6 @@ export default function HomeLanding() {
           </div>
         </section>
 
-        {/* Features */}
         <section id="features" className="space-y-10">
           <div className="mx-auto max-w-xl space-y-2 text-center">
             <h2 className="text-3xl font-black tracking-tight sm:text-4xl">
@@ -246,26 +240,7 @@ export default function HomeLanding() {
           </div>
 
           <div id="security" className="grid grid-cols-1 gap-5 md:grid-cols-3">
-            {[
-              {
-                icon: ShoppingBag,
-                title: 'Kaunta ya Mauzo (POS)',
-                text: 'Kamilisha mauzo kwa haraka kwa Cash, Simu au Deni. Mfumo unapunguza stoo kiotomatiki na kutoa risiti.',
-                tone: 'text-blue-700 bg-blue-500/10 dark:text-blue-400',
-              },
-              {
-                icon: BarChart3,
-                title: 'Takwimu za Biashara',
-                text: 'Fuatilia mauzo, stoo na mwenendo wa biashara yako kupitia dashibodi iliyo rahisi kutumia.',
-                tone: 'text-emerald-700 bg-emerald-500/10 dark:text-emerald-400',
-              },
-              {
-                icon: ShieldCheck,
-                title: 'Madeni na Usalama',
-                text: 'Weka kumbukumbu za madeni ya wateja na taarifa zako za biashara katika akaunti yako.',
-                tone: 'text-indigo-700 bg-indigo-500/10 dark:text-indigo-400',
-              },
-            ].map(({ icon: Icon, title, text, tone }) => (
+            {features.map(({ icon: Icon, title, text, tone }) => (
               <article key={title} className={featureCard}>
                 <span className={`mb-6 flex h-12 w-12 items-center justify-center rounded-2xl ${tone}`}>
                   <Icon className="h-6 w-6" />
@@ -279,14 +254,12 @@ export default function HomeLanding() {
           </div>
         </section>
 
-        {/* Call to action */}
         <section className={`relative overflow-hidden rounded-[36px] p-8 text-center sm:p-14 ${glassPanel}`}>
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-emerald-500/10" />
           <div className="relative space-y-6">
             <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600/10 text-blue-700 dark:text-blue-300">
               <Sparkles className="h-7 w-7" />
             </span>
-
             <div className="mx-auto max-w-lg space-y-2">
               <h2 className="text-3xl font-black tracking-tight sm:text-4xl">
                 Anza kutumia Duka Poa leo.
@@ -295,7 +268,6 @@ export default function HomeLanding() {
                 Fungua akaunti yako na uanze kurekodi bidhaa, mauzo na madeni.
               </p>
             </div>
-
             <button
               type="button"
               onClick={() => navigate('/register')}
@@ -307,7 +279,7 @@ export default function HomeLanding() {
         </section>
       </main>
 
-      <footer className="relative z-10 border-t border-slate-300/60 px-6 py-8 text-center text-xs text-slate-500 dark:border-slate-900 dark:text-slate-500">
+      <footer className="relative z-10 border-t border-slate-300/60 px-6 py-8 text-center text-xs text-slate-500 dark:border-slate-900">
         &copy; {new Date().getFullYear()} Duka Poa POS Tanzania. Haki zote zimehifadhiwa.
       </footer>
     </div>
