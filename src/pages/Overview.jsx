@@ -39,13 +39,53 @@ export default function Overview() {
 
   const [loading, setLoading] = useState(true);
 
-  // Fetch real data & listen to live POS sales
+  // Fetch real data & sync live POS sales securely
   const fetchRealData = async () => {
     try {
-      const res = await api.get(`/analytics/economics/?period=${timeframe}`);
-      if (res.data) {
-        setData(res.data);
+      const [analyticsRes, salesRes, productsRes] = await Promise.allSettled([
+        api.get(`/analytics/economics/?period=${timeframe}`),
+        api.get('/sales/'),
+        api.get('/products/')
+      ]);
+
+      let analyticsData = {};
+      if (analyticsRes.status === 'fulfilled' && analyticsRes.value?.data) {
+        analyticsData = analyticsRes.value.data;
       }
+
+      let salesData = [];
+      if (salesRes.status === 'fulfilled' && salesRes.value?.data) {
+        salesData = Array.isArray(salesRes.value.data) ? salesRes.value.data : (salesRes.value.data.results || []);
+      }
+
+      let productsData = [];
+      if (productsRes.status === 'fulfilled' && productsRes.value?.data) {
+        productsData = Array.isArray(productsRes.value.data) ? productsRes.value.data : (productsRes.value.data.results || []);
+      }
+
+      // Compute accurate totals directly from live database if backend analytics payload is light
+      const totalSales = salesData.reduce((sum, s) => sum + Number(s.total_amount || s.amount || 0), 0);
+      const calculatedNetWorth = productsData.reduce((sum, p) => {
+        const price = Number(p.price || p.selling_price || 0);
+        const qty = Number(p.stock ?? p.stock_quantity ?? 0);
+        return sum + price * qty;
+      }, 0);
+
+      // Generate dynamic sales curve from real transaction dates if missing
+      const dynamicCurve = salesData.length > 0 ? salesData.slice(-7).map((s, idx) => ({
+        date: s.created_at ? new Date(s.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : `Day ${idx + 1}`,
+        value: Number(s.total_amount || s.amount || 0)
+      })) : [];
+
+      setData(prev => ({
+        ...prev,
+        ...analyticsData,
+        today_sales: analyticsData.today_sales || totalSales,
+        total_customers: analyticsData.total_customers || salesData.length,
+        today_tx_count: salesData.length,
+        net_worth: analyticsData.net_worth || calculatedNetWorth,
+        sales_curve: analyticsData.sales_curve?.length ? analyticsData.sales_curve : dynamicCurve
+      }));
     } catch (e) {
       console.warn('Real metrics fetch note:', e);
     } finally {
@@ -57,9 +97,12 @@ export default function Overview() {
     fetchRealData();
     window.addEventListener('duka_sync', fetchRealData);
     window.addEventListener('focus', fetchRealData);
+    const interval = setInterval(fetchRealData, 5000); // Live polling sync fallback
+
     return () => {
       window.removeEventListener('duka_sync', fetchRealData);
       window.removeEventListener('focus', fetchRealData);
+      clearInterval(interval);
     };
   }, [timeframe]);
 
