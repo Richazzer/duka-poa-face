@@ -18,8 +18,8 @@ export default function DashboardLayout({ children }) {
       {/* 1. Global Top Left & Right Liquid Glass Circles (Plan & Notification) */}
       <TopFloatingControls />
 
-      {/* 2. Main Content Area */}
-      <main className="max-w-md mx-auto px-4 pt-20 pb-36">
+      {/* 2. Main Content Area (Expands fully on desktop, responsive padding on mobile) */}
+      <main className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-36">
         {children}
       </main>
 
