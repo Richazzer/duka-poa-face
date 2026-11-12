@@ -27,7 +27,7 @@ export default function Overview() {
   });
   const [loading, setLoading] = useState(true);
 
-  // Fetch 100% Real Live Data
+  // Fetch 100% Real Live Data from Django backend
   const fetchRealData = async () => {
     try {
       const res = await api.get('/analytics/economics/');
@@ -43,12 +43,26 @@ export default function Overview() {
 
   useEffect(() => {
     fetchRealData();
-    // React to sales made in POS or stock added
-    window.addEventListener('duka_sync', fetchRealData);
-    window.addEventListener('focus', fetchRealData);
+
+    // Instant real-time triggers when a sale or stock change happens anywhere in the app
+    const handleSync = () => {
+      fetchRealData();
+    };
+
+    window.addEventListener('duka_sync', handleSync);
+    window.addEventListener('duka_data_updated', handleSync);
+    window.addEventListener('storage', handleSync);
+    window.addEventListener('focus', handleSync);
+
+    // Auto-poll every 10 seconds as a backup heartbeat for real-time responsiveness
+    const interval = setInterval(fetchRealData, 10000);
+
     return () => {
-      window.removeEventListener('duka_sync', fetchRealData);
-      window.removeEventListener('focus', fetchRealData);
+      window.removeEventListener('duka_sync', handleSync);
+      window.removeEventListener('duka_data_updated', handleSync);
+      window.removeEventListener('storage', handleSync);
+      window.removeEventListener('focus', handleSync);
+      clearInterval(interval);
     };
   }, []);
 
@@ -87,13 +101,11 @@ export default function Overview() {
   }, [data.weekly_bars]);
 
   return (
-    <div className="space-y-4 select-none font-sans text-slate-100">
+    <div className="space-y-4 select-none font-sans text-slate-100 pb-12">
       
-      {/* 
-        ========================================================================
-        1. TOP METRIC CARDS (100% Real Data from Database)
-        ========================================================================
-      */}
+      {/* ========================================================================
+          1. TOP METRIC CARDS (100% Real Data from Database)
+          ======================================================================== */}
       <div className="grid grid-cols-2 gap-3">
         
         {/* Total Customers */}
@@ -131,11 +143,9 @@ export default function Overview() {
 
       </div>
 
-      {/* 
-        ========================================================================
-        2. SALES OVERVIEW: Wave Curve (Real Database Transactions)
-        ========================================================================
-      */}
+      {/* ========================================================================
+          2. SALES OVERVIEW: Wave Curve (Real Database Transactions)
+          ======================================================================== */}
       <div className="p-5 rounded-[28px] bg-[#131926]/90 backdrop-blur-3xl border border-white/10 shadow-sm space-y-3">
         <div className="flex items-center justify-between">
           <div>
@@ -185,11 +195,9 @@ export default function Overview() {
         </div>
       </div>
 
-      {/* 
-        ========================================================================
-        3. TOP CATEGORIES (Real Stock & Sales Split)
-        ========================================================================
-      */}
+      {/* ========================================================================
+          3. TOP CATEGORIES (Real Stock & Sales Split)
+          ======================================================================== */}
       <div className="p-5 rounded-[28px] bg-[#131926]/90 backdrop-blur-3xl border border-white/10 shadow-sm space-y-4">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <h2 className="text-sm font-black text-white">Kategoria Zilizopo</h2>
@@ -255,11 +263,9 @@ export default function Overview() {
         )}
       </div>
 
-      {/* 
-        ========================================================================
-        4. WEEKLY ACTIVITY (Real 7-Day Sales Volume)
-        ========================================================================
-      */}
+      {/* ========================================================================
+          4. WEEKLY ACTIVITY (Real 7-Day Sales Volume)
+          ======================================================================== */}
       <div className="p-5 rounded-[28px] bg-[#131926]/90 backdrop-blur-3xl border border-white/10 shadow-sm space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-black text-white">Mzunguko wa Siku 7 (Wiki Hii)</h2>
@@ -286,11 +292,9 @@ export default function Overview() {
         </div>
       </div>
 
-      {/* 
-        ========================================================================
-        5. BUSINESS HEALTH SCORECARD
-        ========================================================================
-      */}
+      {/* ========================================================================
+          5. BUSINESS HEALTH SCORECARD
+          ======================================================================== */}
       <div className="p-5 rounded-[28px] bg-[#131926]/90 backdrop-blur-3xl border border-white/10 shadow-sm space-y-3.5">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
