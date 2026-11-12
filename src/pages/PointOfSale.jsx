@@ -1,285 +1,114 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-  Search,
-  ShoppingCart,
-  Plus,
-  Minus,
-  Trash2,
-  CheckCircle2,
-  RefreshCw,
-  Store,
-  PauseCircle,
-  PlayCircle,
-  Printer,
-  Share2,
-  Receipt,
-  Clock
+import { 
+  Plus, 
+  Search, 
+  RefreshCw, 
+  AlertTriangle, 
+  CheckCircle2, 
+  XCircle, 
+  Boxes,
+  PlusCircle,
+  MinusCircle
 } from 'lucide-react';
 import Modal from '../components/common/Modal';
 import { api } from '../config';
 
-const RECEIPTS_STORAGE_KEY = 'duka_saved_receipts';
-
-export default function PointOfSale() {
+export default function ProductsStock() {
   const [products, setProducts] = useState([]);
-  const [cart, setCart] = useState([]);
   const [search, setSearch] = useState('');
-  const [selectedCat, setSelectedCat] = useState('Zote');
+  const [selectedCategory, setSelectedCategory] = useState('Zote');
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({ name: '', category: '', sellingPrice: '', stockQuantity: '' });
 
-  // Hold / Resume Sale Feature
-  const [heldCarts, setHeldCarts] = useState([]);
-
-  // Saved Receipts Vault (Synced with Django /sales/ + LocalStorage)
-  const [savedReceipts, setSavedReceipts] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem(RECEIPTS_STORAGE_KEY) || '[]');
-    } catch {
-      return [];
-    }
-  });
-  const [isReceiptsModalOpen, setIsReceiptsModalOpen] = useState(false);
-  const [receiptSearch, setReceiptSearch] = useState('');
-
-  // Modals
-  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [completedSale, setCompletedSale] = useState(null);
-
-  // Payment Options for Tanzania
-  const [paymentMethod, setPaymentMethod] = useState('Cash');
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [cashTendered, setCashTendered] = useState('');
-  const [discountAmount, setDiscountAmount] = useState('');
-
-  // 1. Fetch Real Products & Sync Past Sales Receipts from Database
+  // 1. Fetch Products
   const fetchProducts = async () => {
     setLoading(true);
     try {
       const res = await api.get('/products/');
       setProducts(res.data || []);
     } catch (e) {
-      console.warn('Could not fetch products:', e);
+      console.warn('Stock fetch error:', e);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchSavedReceipts = async () => {
-    try {
-      const res = await api.get('/sales/');
-      const backendSales = Array.isArray(res.data) ? res.data : [];
-      if (backendSales.length > 0) {
-        const localMap = new Map(savedReceipts.map((r) => [String(r.id), r]));
-        const merged = backendSales.map((s) => {
-          const existing = localMap.get(String(s.id));
-          return {
-            id: s.id,
-            customer_name: s.customer_name || existing?.customer_name || 'Mteja wa Kawaida',
-            payment_method: s.payment_method || existing?.payment_method || 'Cash',
-            total_amount: Number(s.total_amount || s.amount || existing?.total_amount || 0),
-            items: s.items || existing?.items || [],
-            time: s.created_at
-              ? new Date(s.created_at).toLocaleString([], {
-                  day: '2-digit',
-                  month: 'short',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })
-              : existing?.time || 'Hivi punde',
-            change: existing?.change || 0
-          };
-        });
-        setSavedReceipts(merged);
-        localStorage.setItem(RECEIPTS_STORAGE_KEY, JSON.stringify(merged.slice(0, 100)));
-      }
-    } catch (e) {
-      console.warn('Using local receipt cache:', e);
     }
   };
 
   useEffect(() => {
     fetchProducts();
-    fetchSavedReceipts();
   }, []);
 
-  // Helper to broadcast live updates to Overview.jsx
-  const broadcastOverviewSync = () => {
-    Object.keys(localStorage).forEach((key) => {
-      if (key.startsWith('duka_cached_overview') || key.includes('analytics')) {
-        localStorage.removeItem(key);
-      }
-    });
-    localStorage.setItem('duka_last_sale_ts', String(Date.now()));
-    window.dispatchEvent(new Event('duka_data_updated'));
-    window.dispatchEvent(new Event('storage'));
-  };
-
-  // 2. Cart Operations
-  const addToCart = (product) => {
-    setCart((prev) => {
-      const existing = prev.find((item) => item.id === product.id);
-      if (existing) {
-        return prev.map((item) =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
-        );
-      }
-      return [...prev, { ...product, quantity: 1 }];
-    });
-  };
-
-  const updateQuantity = (id, delta) => {
-    setCart((prev) =>
-      prev
-        .map((item) => {
-          if (item.id === id) {
-            const newQ = item.quantity + delta;
-            return newQ > 0 ? { ...item, quantity: newQ } : null;
-          }
-          return item;
-        })
-        .filter(Boolean)
-    );
-  };
-
-  // Calculations
-  const subtotal = useMemo(() => {
-    return cart.reduce((sum, item) => {
-      const price = Number(item.price || item.selling_price || 0);
-      return sum + price * item.quantity;
-    }, 0);
-  }, [cart]);
-
-  const discount = Number(discountAmount) || 0;
-  const grandTotal = Math.max(0, subtotal - discount);
-
-  const changeDue = useMemo(() => {
-    const given = Number(cashTendered) || 0;
-    if (given <= 0 || given < grandTotal) return 0;
-    return given - grandTotal;
-  }, [cashTendered, grandTotal]);
-
-  // Hold Cart Feature
-  const handleHoldCart = () => {
-    if (cart.length === 0) return;
-    setHeldCarts((prev) => [
-      ...prev,
-      {
-        id: `HOLD-${Date.now()}`,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        items: cart,
-        total: grandTotal
-      }
-    ]);
-    setCart([]);
-  };
-
-  const handleResumeCart = (heldId) => {
-    const target = heldCarts.find((h) => h.id === heldId);
-    if (!target) return;
-    setCart(target.items);
-    setHeldCarts((prev) => prev.filter((h) => h.id !== heldId));
-  };
-
-  // 3. Record Sale, Store Receipt & Sync Live with Overview.jsx
-  const handleCompleteSale = async () => {
-    if (cart.length === 0) return;
+  // 2. Save Product (Shows real error if rejected)
+  const handleSaveProduct = async (e) => {
+    e.preventDefault();
     setLoading(true);
 
-    const salePayload = {
-      total_amount: grandTotal,
-      amount: grandTotal,
-      payment_method: paymentMethod,
-      customer_name: customerName.trim() || 'Mteja wa Kawaida',
-      items: cart.map((i) => ({
-        id: i.id,
-        product_id: i.id,
-        name: i.name,
-        quantity: i.quantity,
-        price: Number(i.price || i.selling_price || 0)
-      }))
+    const priceNum = Number(form.sellingPrice) || 0;
+    const stockNum = Number(form.stockQuantity) || 0;
+
+    const payload = {
+      name: form.name.trim(),
+      category: form.category.trim() || 'Duka',
+      price: priceNum,
+      selling_price: priceNum,
+      stock: stockNum,
+      stock_quantity: stockNum
     };
 
     try {
-      const res = await api.post('/sales/', salePayload);
-
-      // If Deni, record in debt ledger
-      if (paymentMethod === 'Deni') {
-        try {
-          await api.post('/debts/', {
-            customer_name: salePayload.customer_name,
-            amount_owed: grandTotal,
-            phone: customerPhone.trim(),
-            notes: `Mauzo ya kaunta (Bidhaa ${cart.length})`,
-            is_paid: false
-          });
-        } catch (err) {
-          console.warn('Debt ledger sync warning:', err);
-        }
-      }
-
-      const receiptRecord = {
-        ...salePayload,
-        id: res.data?.id || `RCP-${Date.now().toString().slice(-6)}`,
-        subtotal,
-        discount,
-        change: changeDue,
-        phone: customerPhone.trim(),
-        time: new Date().toLocaleString([], {
-          day: '2-digit',
-          month: 'short',
-          hour: '2-digit',
-          minute: '2-digit'
-        })
-      };
-
-      // Save receipt into permanent Receipt Vault
-      setSavedReceipts((prev) => {
-        const updated = [receiptRecord, ...prev].slice(0, 100);
-        localStorage.setItem(RECEIPTS_STORAGE_KEY, JSON.stringify(updated));
-        return updated;
-      });
-
-      setCompletedSale(receiptRecord);
-      setCart([]);
-      setIsCheckoutOpen(false);
-      setCashTendered('');
-      setDiscountAmount('');
-      setCustomerName('');
-      setCustomerPhone('');
-
-      // Refresh stock & force Overview.jsx to pull fresh analytics
-      await fetchProducts();
-      broadcastOverviewSync();
+      const res = await api.post('/products/', payload);
+      setProducts((prev) => [res.data, ...prev]);
+      setIsModalOpen(false);
+      setForm({ name: '', category: '', sellingPrice: '', stockQuantity: '' });
     } catch (err) {
-      alert('Imeshindikana kurekodi mauzo. Hakikisha mtandao uko sawa.');
+      console.error('Save product error:', err);
+      // Reveals the exact error (e.g. session expired, field error, etc.)
+      if (err.response?.status === 401) {
+        alert('Kipindi chako kimeisha. Tafadhali ingia tena kwenye akaunti yako.');
+        localStorage.clear();
+        window.location.href = '/login';
+      } else {
+        const errorDetail = err.response?.data ? JSON.stringify(err.response.data) : err.message;
+        alert(`Hitilafu: ${errorDetail}`);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // WhatsApp Receipt Share (Works for both live receipt and stored receipts)
-  const handleShareWhatsApp = (receipt = completedSale) => {
-    if (!receipt) return;
-    let cleanPhone = (receipt.phone || customerPhone || '').replace(/\D/g, '');
-    if (cleanPhone.startsWith('0')) cleanPhone = '255' + cleanPhone.slice(1);
+  // 3. Quick Stock Adjust (+1 / -1)
+  const handleAdjustStock = async (product, delta) => {
+    const currentStock = product.stock ?? product.stock_quantity ?? 0;
+    const newStock = Math.max(0, currentStock + delta);
 
-    const itemsLines = (receipt.items || [])
-      .map((i) => `• ${i.name} x${i.quantity} = TZS ${(i.price * i.quantity).toLocaleString()}`)
-      .join('\n');
-
-    const msg = encodeURIComponent(
-      `🧾 *RISITI YA DUKA POA*\n` +
-        `Risiti Na: #${receipt.id}\n` +
-        `Tarehe: ${receipt.time || ''}\n` +
-        `Mteja: ${receipt.customer_name}\n` +
-        (itemsLines ? `\n*Bidhaa:*\n${itemsLines}\n\n` : '\n') +
-        `*Jumla: TZS ${Number(receipt.total_amount).toLocaleString()}*\n` +
-        `Malipo: ${receipt.payment_method}\n` +
-        `Ahsante kwa kufanya biashara nasi!`
+    setProducts((prev) =>
+      prev.map((p) => (p.id === product.id ? { ...p, stock: newStock, stock_quantity: newStock } : p))
     );
-    window.open(`https://wa.me/${cleanPhone}?text=${msg}`, '_blank');
+
+    try {
+      await api.patch(`/products/${product.id}/`, {
+        stock: newStock,
+        stock_quantity: newStock
+      });
+    } catch (e) {
+      fetchProducts();
+    }
   };
+
+  const totalStockValue = useMemo(() => {
+    return products.reduce((sum, p) => {
+      const price = Number(p.price || p.selling_price || 0);
+      const qty = Number(p.stock ?? p.stock_quantity ?? 0);
+      return sum + price * qty;
+    }, 0);
+  }, [products]);
+
+  const lowStockCount = useMemo(() => {
+    return products.filter((p) => {
+      const qty = Number(p.stock ?? p.stock_quantity ?? 0);
+      return qty > 0 && qty <= 5;
+    }).length;
+  }, [products]);
 
   const categories = useMemo(() => {
     const list = new Set(products.map((p) => p.category).filter(Boolean));
@@ -287,95 +116,71 @@ export default function PointOfSale() {
   }, [products]);
 
   const filtered = products.filter((p) => {
-    const matchSearch = (p.name || '').toLowerCase().includes(search.toLowerCase());
-    const matchCat = selectedCat === 'Zote' || p.category === selectedCat;
-    return matchSearch && matchCat;
-  });
-
-  const filteredReceipts = savedReceipts.filter((r) => {
-    const q = receiptSearch.toLowerCase();
-    return (
-      String(r.id).toLowerCase().includes(q) ||
-      (r.customer_name || '').toLowerCase().includes(q) ||
-      (r.payment_method || '').toLowerCase().includes(q)
-    );
+    const matchesSearch = (p.name || '').toLowerCase().includes(search.toLowerCase());
+    const matchesCat = selectedCategory === 'Zote' || p.category === selectedCategory;
+    return matchesSearch && matchesCat;
   });
 
   return (
-    <div className="max-w-6xl mx-auto space-y-4 select-none font-sans pb-32 text-slate-100">
-      {/* Print-only stylesheet so window.print() outputs a clean POS receipt */}
-      <style>{`
-        @media print {
-          body * { visibility: hidden; }
-          #printable-receipt-area, #printable-receipt-area * { visibility: visible; }
-          #printable-receipt-area {
-            position: fixed;
-            left: 0;
-            top: 0;
-            width: 100%;
-            background: #ffffff !important;
-            color: #000000 !important;
-            padding: 20px;
-          }
-        }
-      `}</style>
+    <div className="max-w-6xl mx-auto space-y-5 select-none font-sans pb-28">
+      
+      {/* Valuation Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <div className="p-4 sm:p-5 rounded-[24px] bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl border border-slate-200/80 dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Thamani ya Stoo</p>
+          <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">TZS {totalStockValue.toLocaleString()}</h3>
+        </div>
 
-      {/* TOP SPEED BAR: Search, Saved Receipts Vault, Refresh */}
-      <div className="bg-[#131926]/90 backdrop-blur-3xl p-4 rounded-[26px] border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.25)] flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="p-4 sm:p-5 rounded-[24px] bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl border border-slate-200/80 dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Jumla ya Bidhaa</p>
+          <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">{products.length} Aina</h3>
+        </div>
+
+        <div className="p-4 sm:p-5 rounded-[24px] bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl border border-slate-200/80 dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Zinazokaribia Kuisha</p>
+          <h3 className="text-xl sm:text-2xl font-black text-amber-500 mt-1">{lowStockCount} Bidhaa</h3>
+        </div>
+
+        <div className="p-4 sm:p-5 rounded-[24px] bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl border border-slate-200/80 dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Zilizokwisha</p>
+          <h3 className="text-xl sm:text-2xl font-black text-rose-500 mt-1">
+            {products.filter(p => Number(p.stock ?? p.stock_quantity ?? 0) === 0).length} Bidhaa
+          </h3>
+        </div>
+      </div>
+
+      {/* Action Header */}
+      <div className="bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl p-4 sm:p-5 rounded-[26px] border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="relative flex-1 w-full">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Tafuta bidhaa kwa jina au barcode..."
+            placeholder="Tafuta bidhaa stoo..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-full text-xs sm:text-sm bg-[#1a2336] border border-slate-700/80 text-white placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full pl-10 pr-4 py-2.5 rounded-full text-xs sm:text-sm bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-          {/* Parked Carts Counter */}
-          {heldCarts.length > 0 && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-bold">
-              <PauseCircle className="w-3.5 h-3.5 text-amber-400" />
-              <span>{heldCarts.length} Zilizosimama</span>
-            </div>
-          )}
-
-          {/* Stored Receipts Vault Button */}
-          <button
-            onClick={() => {
-              fetchSavedReceipts();
-              setIsReceiptsModalOpen(true);
-            }}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-xs font-bold transition-all cursor-pointer"
-            title="Tazama Risiti Zote Zilizohifadhiwa"
-          >
-            <Receipt className="w-3.5 h-3.5" />
-            <span>Risiti ({savedReceipts.length})</span>
+          <button onClick={fetchProducts} className="p-2.5 rounded-full bg-slate-100/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-all cursor-pointer">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-500' : ''}`} />
           </button>
-
-          <button
-            onClick={fetchProducts}
-            className="p-2.5 rounded-full bg-[#1a2336] text-slate-300 hover:text-white hover:bg-slate-700/70 border border-slate-700/80 transition-all cursor-pointer"
-            title="Sawazisha Bidhaa"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-400' : ''}`} />
+          <button onClick={() => setIsModalOpen(true)} className="py-2.5 px-5 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer">
+            <Plus className="w-4 h-4" /> Ongeza Bidhaa Mpya
           </button>
         </div>
       </div>
 
-      {/* Category Filter Pills */}
+      {/* Categories */}
       {categories.length > 1 && (
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
           {categories.map((cat) => (
             <button
               key={cat}
-              onClick={() => setSelectedCat(cat)}
+              onClick={() => setSelectedCategory(cat)}
               className={`py-1.5 px-4 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                selectedCat === cat
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
-                  : 'bg-[#131926]/80 text-slate-400 border border-slate-800 hover:text-white hover:bg-[#1a2336]'
+                selectedCategory === cat ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'bg-white/80 dark:bg-slate-900/80 text-slate-600 dark:text-slate-300 border border-slate-200/70 dark:border-slate-800'
               }`}
             >
               {cat}
@@ -384,451 +189,82 @@ export default function PointOfSale() {
         </div>
       )}
 
-      {/* Parked Carts Quick Resume Bar */}
-      {heldCarts.length > 0 && (
-        <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between gap-3 overflow-x-auto">
-          <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5 shrink-0">
-            <PauseCircle className="w-4 h-4" /> Wateja Waliosimama:
-          </span>
-          <div className="flex items-center gap-2">
-            {heldCarts.map((h) => (
-              <button
-                key={h.id}
-                onClick={() => handleResumeCart(h.id)}
-                className="py-1 px-3 bg-[#1a2336] border border-amber-500/40 text-xs font-bold text-white rounded-lg flex items-center gap-1.5 hover:scale-105 active:scale-95 transition-all cursor-pointer"
-              >
-                <PlayCircle className="w-3.5 h-3.5 text-emerald-400" />
-                <span>
-                  {h.time} (TZS {h.total.toLocaleString()})
-                </span>
-              </button>
-            ))}
+      {/* Products Table */}
+      <div className="bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl rounded-[28px] border border-slate-200/80 dark:border-slate-800 shadow-[0_8px_30px_rgba(0,0,0,0.02)] overflow-hidden">
+        {filtered.length === 0 ? (
+          <div className="p-12 text-center space-y-3">
+            <Boxes className="w-10 h-10 text-slate-400 mx-auto" />
+            <h3 className="font-bold text-slate-800 dark:text-white">Hakuna Bidhaa</h3>
+            <p className="text-xs text-slate-500">Bofya "Ongeza Bidhaa Mpya" kusajili bidhaa ya stoo.</p>
           </div>
-        </div>
-      )}
-
-      {/* MAIN SPLIT VIEW: Touch Tiles (Left) & Active Register Cart (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        {/* Large Tactile Product Tiles */}
-        <div className="lg:col-span-2">
-          {filtered.length === 0 ? (
-            <div className="p-12 text-center rounded-[28px] bg-[#131926]/90 border border-white/10 space-y-2">
-              <Store className="w-10 h-10 text-slate-500 mx-auto" />
-              <h3 className="font-bold text-white">Hakuna Bidhaa Iliyopatikana</h3>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                Ingiza bidhaa kwenye tab ya Stoo (📦) kuanza kuuza.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {filtered.map((prod) => {
-                const price = Number(prod.price || prod.selling_price || 0);
-                const stock = Number(prod.stock ?? prod.stock_quantity ?? 0);
-                const inCart = cart.find((c) => c.id === prod.id);
-
-                return (
-                  <div
-                    key={prod.id}
-                    onClick={() => stock > 0 && addToCart(prod)}
-                    className={`relative p-4 rounded-[22px] bg-[#131926]/90 border transition-all ${
-                      stock > 0
-                        ? inCart
-                          ? 'border-blue-500 bg-blue-950/20 shadow-md scale-[1.01]'
-                          : 'border-white/10 hover:border-blue-400/50 hover:scale-[1.01] cursor-pointer'
-                        : 'opacity-40 cursor-not-allowed border-slate-800'
-                    }`}
-                  >
-                    {inCart && (
-                      <span className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-black flex items-center justify-center">
-                        {inCart.quantity}
-                      </span>
-                    )}
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                      {prod.category || 'Duka'}
-                    </span>
-                    <h4 className="font-bold text-sm text-white mt-1 truncate">{prod.name}</h4>
-                    <p className="text-xs font-black text-blue-400 mt-1">
-                      TZS {price.toLocaleString()}
-                    </p>
-                    <span className="text-[10px] text-slate-500 block mt-2">Stock: {stock}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Cashier Running Bill Cart */}
-        <div className="lg:col-span-1 bg-[#131926]/90 backdrop-blur-3xl p-5 rounded-[28px] border border-white/10 shadow-[0_10px_35px_rgba(0,0,0,0.3)] space-y-4 sticky top-6">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <h2 className="font-black text-white text-sm flex items-center gap-2">
-              <ShoppingCart className="w-4 h-4 text-blue-400" /> Orodha ya Mauzo
-            </h2>
-
-            {cart.length > 0 && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleHoldCart}
-                  className="p-1.5 rounded-lg text-amber-400 hover:bg-amber-500/10 transition-colors"
-                  title="Simamisha Mauzo haya"
-                >
-                  <PauseCircle className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setCart([])}
-                  className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/10 transition-colors"
-                  title="Futa Cart"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50/80 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 text-slate-400 uppercase tracking-wider font-bold">
+                <tr>
+                  <th className="py-3.5 px-5">Jina la Bidhaa</th>
+                  <th className="py-3.5 px-4">Kategoria</th>
+                  <th className="py-3.5 px-4">Bei ya Kuuza</th>
+                  <th className="py-3.5 px-4 text-center">Idadi ya Stoo</th>
+                  <th className="py-3.5 px-5 text-right">Rekebisha</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                {filtered.map((item) => {
+                  const price = item.price || item.selling_price || 0;
+                  const stock = item.stock ?? item.stock_quantity ?? 0;
+                  return (
+                    <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-all">
+                      <td className="py-4 px-5 font-bold text-slate-900 dark:text-white">{item.name}</td>
+                      <td className="py-4 px-4 text-slate-500 dark:text-slate-400">{item.category || 'Duka'}</td>
+                      <td className="py-4 px-4 font-black text-slate-900 dark:text-white">TZS {Number(price).toLocaleString()}</td>
+                      <td className="py-4 px-4 text-center font-black text-sm text-slate-900 dark:text-white">{stock}</td>
+                      <td className="py-4 px-5 text-right">
+                        <div className="inline-flex items-center gap-1.5 justify-end">
+                          <button onClick={() => handleAdjustStock(item, -1)} className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 cursor-pointer">
+                            <MinusCircle className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => handleAdjustStock(item, 1)} className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 cursor-pointer">
+                            <PlusCircle className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-
-          {/* Cart Item rows */}
-          <div className="space-y-2.5 max-h-64 overflow-y-auto scrollbar-none">
-            {cart.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-8">
-                Bofya bidhaa upande wa kushoto kuziweka kwenye orodha.
-              </p>
-            ) : (
-              cart.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between text-xs p-2.5 rounded-xl bg-[#192132]"
-                >
-                  <div className="flex-1 truncate mr-2">
-                    <p className="font-bold text-white truncate">{item.name}</p>
-                    <p className="text-slate-400 text-[11px]">
-                      TZS {Number(item.price || item.selling_price || 0).toLocaleString()} x{' '}
-                      {item.quantity}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => updateQuantity(item.id, -1)}
-                      className="p-1 rounded-md bg-[#232d42] text-slate-300 hover:text-white"
-                    >
-                      <Minus className="w-3 h-3" />
-                    </button>
-                    <span className="font-bold w-4 text-center text-white">{item.quantity}</span>
-                    <button
-                      onClick={() => updateQuantity(item.id, 1)}
-                      className="p-1 rounded-md bg-[#232d42] text-slate-300 hover:text-white"
-                    >
-                      <Plus className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Totals & Discounts */}
-          <div className="border-t border-slate-800 pt-3 space-y-2.5">
-            <div className="flex justify-between items-center text-xs text-slate-400">
-              <span>Jumla Ndogo:</span>
-              <span className="font-bold text-white">TZS {subtotal.toLocaleString()}</span>
-            </div>
-
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-400">Punguzo (Discount):</span>
-              <input
-                type="number"
-                placeholder="0"
-                value={discountAmount}
-                onChange={(e) => setDiscountAmount(e.target.value)}
-                className="w-24 px-2 py-1 rounded-lg bg-[#192132] border border-slate-700 text-right text-xs text-white outline-none font-bold"
-              />
-            </div>
-
-            <div className="flex justify-between items-center text-sm pt-2 border-t border-slate-800/80">
-              <span className="font-bold text-slate-300">Jumla ya Kulipa:</span>
-              <span className="font-black text-xl text-blue-400">
-                TZS {grandTotal.toLocaleString()}
-              </span>
-            </div>
-
-            <button
-              onClick={() => setIsCheckoutOpen(true)}
-              disabled={cart.length === 0}
-              className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-full shadow-lg shadow-blue-600/30 disabled:opacity-40 active:scale-95 transition-all cursor-pointer"
-            >
-              Kamilisha Mauzo ({cart.length}) ➔
-            </button>
-          </div>
-        </div>
+        )}
       </div>
 
-      {/* CHECKOUT MODAL */}
-      <Modal
-        isOpen={isCheckoutOpen}
-        onClose={() => setIsCheckoutOpen(false)}
-        title="Kamilisha Malipo"
-      >
-        <div className="space-y-4">
+      {/* Add Product Modal */}
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Weka Bidhaa Mpya Stoo">
+        <form onSubmit={handleSaveProduct} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
-              Jina la Mteja (Hiari)
-            </label>
-            <input
-              type="text"
-              placeholder="Mf. Mama Baraka au Juma"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-700 bg-[#1a2336] text-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5 uppercase">Jina la Bidhaa</label>
+            <input required type="text" placeholder="Mf. Unga wa Ngano 2kg" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-[#1a2332] text-slate-900 dark:text-white text-sm outline-none" />
           </div>
-
           <div>
-            <label className="block text-xs font-bold text-slate-300 mb-2 uppercase tracking-wider">
-              Njia ya Malipo (Tanzania)
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { id: 'Cash', label: 'Cash' },
-                { id: 'M-Pesa', label: 'M-Pesa' },
-                { id: 'Airtel Money', label: 'Airtel' },
-                { id: 'Mixx by Yas', label: 'Mixx (Tigo)' },
-                { id: 'Deni', label: 'Deni (Credit)' }
-              ].map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setPaymentMethod(m.id)}
-                  className={`py-2 px-2 text-xs font-bold rounded-xl border text-center transition-all cursor-pointer ${
-                    paymentMethod === m.id
-                      ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/20'
-                      : 'border-slate-700 text-slate-400 bg-[#192132] hover:text-white'
-                  }`}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5 uppercase">Kategoria</label>
+            <input type="text" placeholder="Mf. Vyakula, Sabuni" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-[#1a2332] text-slate-900 dark:text-white text-sm outline-none" />
           </div>
-
-          {paymentMethod === 'Cash' && (
-            <div className="p-3.5 bg-[#192132] rounded-2xl space-y-2 border border-slate-700">
-              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                Pesa Iliyotolewa na Mteja (TZS)
-              </label>
-
-              <input
-                type="number"
-                placeholder={`Mf. ${grandTotal.toLocaleString()}`}
-                value={cashTendered}
-                onChange={(e) => setCashTendered(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-[#121722] border border-slate-700 text-white font-bold text-sm outline-none"
-              />
-
-              <div className="flex gap-1.5 pt-1">
-                {[grandTotal, 2000, 5000, 10000, 20000, 50000]
-                  .filter((v, i, a) => v >= grandTotal && a.indexOf(v) === i)
-                  .slice(0, 4)
-                  .map((bill) => (
-                    <button
-                      key={bill}
-                      type="button"
-                      onClick={() => setCashTendered(bill.toString())}
-                      className="px-2 py-1 rounded-lg bg-[#232d42] border border-slate-600 text-[10px] font-bold text-slate-300"
-                    >
-                      {bill === grandTotal ? 'Kamili' : bill.toLocaleString()}
-                    </button>
-                  ))}
-              </div>
-
-              <div className="flex justify-between items-center pt-2 border-t border-slate-700 text-xs font-bold">
-                <span className="text-slate-400">Chenji ya Kurudisha:</span>
-                <span className="text-emerald-400 font-mono font-black text-sm">
-                  TZS {changeDue.toLocaleString()}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {paymentMethod === 'Deni' && (
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-amber-400 mb-1 uppercase tracking-wider">
-                Namba ya Simu (WhatsApp ya Mteja)
-              </label>
-              <input
-                type="text"
-                placeholder="0712345678"
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-amber-500/40 bg-[#1a2336] text-white text-sm outline-none"
-              />
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5 uppercase">Bei ya Kuuza (TZS)</label>
+              <input required type="number" placeholder="3500" value={form.sellingPrice} onChange={(e) => setForm({ ...form, sellingPrice: e.target.value })} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-[#1a2332] text-slate-900 dark:text-white text-sm outline-none" />
             </div>
-          )}
-
-          <div className="p-3 bg-blue-950/40 rounded-xl flex justify-between text-xs font-bold border border-blue-800/40">
-            <span className="text-slate-300">Jumla ya Mauzo:</span>
-            <span className="text-blue-400 text-sm font-black">
-              TZS {grandTotal.toLocaleString()}
-            </span>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5 uppercase">Idadi ya Stock</label>
+              <input required type="number" placeholder="50" value={form.stockQuantity} onChange={(e) => setForm({ ...form, stockQuantity: e.target.value })} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-[#1a2332] text-slate-900 dark:text-white text-sm outline-none" />
+            </div>
           </div>
-
-          <button
-            onClick={handleCompleteSale}
-            disabled={loading}
-            className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-full transition-all active:scale-95 cursor-pointer shadow-lg shadow-blue-600/30"
-          >
-            {loading ? 'Inarekodi...' : 'Thibitisha na Toa Risiti ➔'}
+          <button type="submit" disabled={loading} className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl cursor-pointer shadow-md">
+            {loading ? 'Inahifadhi...' : 'Hifadhi Bidhaa Kwenye Database ➔'}
           </button>
-        </div>
+        </form>
       </Modal>
 
-      {/* DIGITAL RECEIPT MODAL (Printable & Shareable via WhatsApp) */}
-      {completedSale && (
-        <Modal isOpen={true} onClose={() => setCompletedSale(null)} title="Risiti ya Mauzo">
-          <div id="printable-receipt-area" className="space-y-4 text-center py-2">
-            <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
-            <div>
-              <h3 className="font-black text-lg text-white">DUKA POA RECEIPT</h3>
-              <p className="text-xs text-slate-400">
-                Risiti Na: #{completedSale.id} • {completedSale.time}
-              </p>
-            </div>
-
-            <div className="p-4 bg-[#192132] rounded-2xl text-left text-xs space-y-2 border border-slate-800">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Mteja:</span>
-                <span className="font-bold text-white">{completedSale.customer_name}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Malipo:</span>
-                <span className="font-bold text-white">{completedSale.payment_method}</span>
-              </div>
-
-              {Array.isArray(completedSale.items) && completedSale.items.length > 0 && (
-                <div className="border-t border-slate-700/80 pt-2 space-y-1">
-                  {completedSale.items.map((item, idx) => (
-                    <div key={idx} className="flex justify-between text-[11px] text-slate-300">
-                      <span>
-                        {item.name} x{item.quantity}
-                      </span>
-                      <span>TZS {(Number(item.price) * Number(item.quantity)).toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="flex justify-between border-t border-slate-700/80 pt-2">
-                <span className="text-slate-400">Jumla:</span>
-                <span className="font-black text-blue-400 text-sm">
-                  TZS {Number(completedSale.total_amount).toLocaleString()}
-                </span>
-              </div>
-
-              {completedSale.change > 0 && (
-                <div className="flex justify-between text-emerald-400 font-bold border-t border-slate-700 pt-1.5">
-                  <span>Chenji:</span>
-                  <span>TZS {Number(completedSale.change).toLocaleString()}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-2 mt-2">
-            <div className="flex gap-2">
-              <button
-                onClick={() => window.print()}
-                className="flex-1 py-2.5 rounded-xl bg-[#232d42] hover:bg-slate-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Printer className="w-4 h-4" /> Print
-              </button>
-
-              <button
-                onClick={() => handleShareWhatsApp(completedSale)}
-                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Share2 className="w-4 h-4" /> WhatsApp
-              </button>
-            </div>
-
-            <button
-              onClick={() => setCompletedSale(null)}
-              className="w-full py-3 bg-white text-slate-900 rounded-full text-xs font-black hover:bg-slate-100 cursor-pointer"
-            >
-              Mteja Mwingine (Next Sale) ➔
-            </button>
-          </div>
-        </Modal>
-      )}
-
-      {/* STORED RECEIPTS VAULT MODAL (Where all receipts are saved & viewable) */}
-      <Modal
-        isOpen={isReceiptsModalOpen}
-        onClose={() => setIsReceiptsModalOpen(false)}
-        title={`Kumbukumbu za Risiti (${savedReceipts.length})`}
-      >
-        <div className="space-y-3">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Tafuta risiti kwa namba, mteja, au malipo..."
-              value={receiptSearch}
-              onChange={(e) => setReceiptSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 rounded-xl bg-[#1a2336] border border-slate-700 text-xs text-white outline-none"
-            />
-          </div>
-
-          <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
-            {filteredReceipts.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-8">
-                Hakuna risiti zilizohifadhiwa bado.
-              </p>
-            ) : (
-              filteredReceipts.map((rcp) => (
-                <div
-                  key={rcp.id}
-                  className="p-3 rounded-xl bg-[#192132] border border-slate-800 flex items-center justify-between gap-2 text-xs"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-black text-blue-400">#{rcp.id}</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
-                        {rcp.payment_method}
-                      </span>
-                    </div>
-                    <p className="font-bold text-white truncate mt-0.5">{rcp.customer_name}</p>
-                    <p className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
-                      <Clock className="w-3 h-3" /> {rcp.time}
-                    </p>
-                  </div>
-
-                  <div className="text-right shrink-0 space-y-1.5">
-                    <p className="font-black text-emerald-400">
-                      TZS {Number(rcp.total_amount).toLocaleString()}
-                    </p>
-                    <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        onClick={() => {
-                          setIsReceiptsModalOpen(false);
-                          setCompletedSale(rcp);
-                        }}
-                        className="px-2.5 py-1 rounded-lg bg-[#232d42] hover:bg-slate-700 text-[10px] font-bold text-white cursor-pointer"
-                      >
-                        Fungua / Print
-                      </button>
-                      <button
-                        onClick={() => handleShareWhatsApp(rcp)}
-                        className="p-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 cursor-pointer"
-                        title="Tuma WhatsApp"
-                      >
-                        <Share2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }
