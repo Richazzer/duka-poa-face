@@ -6,11 +6,15 @@ import {
   TrendingDown, 
   Package, 
   HeartPulse, 
-  Boxes
+  Boxes,
+  Calendar,
+  ChevronDown
 } from 'lucide-react';
 import { api } from '../config';
 
 export default function Overview() {
+  const [timeRange, setTimeRange] = useState('daily'); // 'daily' | 'weekly' | 'monthly' | 'yearly'
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [data, setData] = useState({
     today_sales: 0,
     yesterday_sales: 0,
@@ -21,24 +25,16 @@ export default function Overview() {
     health_score: 85,
     net_worth: 0,
     category_breakdown: [],
-    weekly_bars: [
-      { day: 'Jumatatu', value: 0 },
-      { day: 'Jumanne', value: 0 },
-      { day: 'Jumatano', value: 0 },
-      { day: 'Alhamisi', value: 0 },
-      { day: 'Ijumaa', value: 0 },
-      { day: 'Jumamosi', value: 0 },
-      { day: 'Jumapili', value: 0 },
-    ],
+    weekly_bars: [],
     sales_curve: []
   });
   const [loading, setLoading] = useState(true);
 
-  // Fetch real analytics data safely with fallbacks
+  // Fetch real analytics data safely with timeRange query support
   const fetchRealData = async () => {
     try {
       const [analyticsRes, productsRes] = await Promise.allSettled([
-        api.get('/analytics/economics/'),
+        api.get(`/analytics/economics/?range=${timeRange}`),
         api.get('/products/')
       ]);
 
@@ -52,7 +48,6 @@ export default function Overview() {
         productsData = Array.isArray(productsRes.value.data) ? productsRes.value.data : (productsRes.value.data.results || []);
       }
 
-      // Calculate stock net worth and categories dynamically if backend analytics is empty
       const calculatedNetWorth = productsData.reduce((sum, p) => {
         const price = Number(p.price || p.selling_price || 0);
         const qty = Number(p.stock ?? p.stock_quantity ?? 0);
@@ -102,7 +97,14 @@ export default function Overview() {
       window.removeEventListener('focus', handleSync);
       clearInterval(interval);
     };
-  }, []);
+  }, [timeRange]);
+
+  const rangeLabels = {
+    daily: 'Kila Siku',
+    weekly: 'Kila Wiki',
+    monthly: 'Kila Mwezi',
+    yearly: 'Kila Mwaka'
+  };
 
   const curvePoints = useMemo(() => {
     const curve = data.sales_curve?.length ? data.sales_curve : [
@@ -136,15 +138,53 @@ export default function Overview() {
   }, [data.weekly_bars]);
 
   return (
-    <div className="w-full max-w-7xl mx-auto space-y-4 select-none font-sans text-slate-100 pb-36">
+    <div className="w-full max-w-7xl mx-auto space-y-4 select-none font-sans text-slate-100 pb-36 relative">
       
-      {/* 1. TOP METRIC CARDS (Responsive Grid) */}
+      {/* HEADER WITH TIME RANGE DROPDOWN */}
+      <div className="flex items-center justify-between bg-[#131926]/90 backdrop-blur-3xl p-4 rounded-[24px] border border-white/10 shadow-sm">
+        <div>
+          <h2 className="text-sm sm:text-base font-black text-white">Muhtasari wa Biashara</h2>
+          <p className="text-[11px] text-slate-400">Takwimu na mienendo halisi ya duka lako</p>
+        </div>
+
+        {/* Dropdown Selector */}
+        <div className="relative">
+          <button
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#1a2336] hover:bg-[#222d44] border border-slate-700/80 text-xs font-bold text-slate-200 transition-all cursor-pointer shadow-sm"
+          >
+            <Calendar className="w-3.5 h-3.5 text-blue-400" />
+            <span>{rangeLabels[timeRange]}</span>
+            <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {isDropdownOpen && (
+            <div className="absolute right-0 mt-2 w-36 rounded-2xl bg-[#182030] border border-slate-700 shadow-2xl py-1.5 z-50 animate-fadeIn">
+              {Object.entries(rangeLabels).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => {
+                    setTimeRange(key);
+                    setIsDropdownOpen(false);
+                  }}
+                  className={`w-full text-left px-4 py-2 text-xs font-medium transition-colors cursor-pointer ${
+                    timeRange === key ? 'bg-blue-600 text-white font-bold' : 'text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 1. TOP METRIC CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         
-        {/* Total Customers */}
         <div className="p-4 sm:p-5 rounded-[24px] bg-[#131926]/90 backdrop-blur-3xl border border-white/10 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Wateja Wote</p>
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Wateja Wote ({rangeLabels[timeRange]})</p>
             <h3 className="text-xl sm:text-2xl font-black text-white mt-1">
               {data.total_customers.toLocaleString()}
             </h3>
@@ -157,10 +197,9 @@ export default function Overview() {
           </div>
         </div>
 
-        {/* Real Sales */}
         <div className="p-4 sm:p-5 rounded-[24px] bg-[#131926]/90 backdrop-blur-3xl border border-white/10 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Mauzo ya Leo</p>
+            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Mauzo ({rangeLabels[timeRange]})</p>
             <h3 className="text-xl sm:text-2xl font-black text-white mt-1">
               TZS {data.today_sales.toLocaleString()}
             </h3>
@@ -184,7 +223,7 @@ export default function Overview() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-black text-white">Mwenendo wa Mauzo</h2>
-              <p className="text-[11px] text-slate-400">Grafu ya kiasi kilichokusanywa leo</p>
+              <p className="text-[11px] text-slate-400">Grafu ya mauzo ya {rangeLabels[timeRange].toLowerCase()}</p>
             </div>
             <div className="bg-[#1a2336] text-blue-400 font-mono text-xs font-black px-3 py-1.5 rounded-xl border border-slate-700">
               TZS {data.today_sales.toLocaleString()}
@@ -290,18 +329,20 @@ export default function Overview() {
 
       </div>
 
-      {/* 3. WEEKLY ACTIVITY & HEALTH SCORE (2-Column Grid) */}
+      {/* 3. WEEKLY ACTIVITY & HEALTH SCORE */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-        {/* Weekly Activity */}
         <div className="p-5 rounded-[28px] bg-[#131926]/90 backdrop-blur-3xl border border-white/10 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-black text-white">Mzunguko wa Siku 7 (Wiki Hii)</h2>
-            <span className="text-[11px] font-bold text-slate-400">Jumapili - Jumamosi</span>
+            <h2 className="text-sm font-black text-white">Mzunguko wa Mauzo ({rangeLabels[timeRange]})</h2>
+            <span className="text-[11px] font-bold text-slate-400">Vipimo vya Mwenendo</span>
           </div>
 
           <div className="flex items-end justify-between h-24 pt-2 px-2 gap-2">
-            {data.weekly_bars.map((bar, i) => {
+            {(data.weekly_bars && data.weekly_bars.length > 0 ? data.weekly_bars : [
+              { day: '1', value: 10 }, { day: '2', value: 25 }, { day: '3', value: 40 },
+              { day: '4', value: 30 }, { day: '5', value: 60 }, { day: '6', value: 80 }, { day: '7', value: 50 }
+            ]).map((bar, i) => {
               const heightPct = bar.value > 0 ? Math.max(12, Math.round((bar.value / maxBarValue) * 100)) : 6;
               return (
                 <div key={i} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end">
@@ -313,14 +354,13 @@ export default function Overview() {
                     }`}
                     style={{ height: `${heightPct}%` }}
                   ></div>
-                  <span className="text-[9px] font-mono text-slate-400">{bar.day.substring(0, 3)}</span>
+                  <span className="text-[9px] font-mono text-slate-400">{bar.day}</span>
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* Business Health Scorecard */}
         <div className="p-5 rounded-[28px] bg-[#131926]/90 backdrop-blur-3xl border border-white/10 shadow-sm space-y-3.5">
           <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
             <div className="flex items-center gap-2">
@@ -339,7 +379,7 @@ export default function Overview() {
             </div>
 
             <div className="p-3 rounded-2xl bg-[#192233] border border-slate-800/80 text-xs text-slate-300 flex items-center justify-between">
-              <span>Makadirio ya Faida ya Leo:</span>
+              <span>Makadirio ya Faida ({rangeLabels[timeRange]}):</span>
               <strong className="text-emerald-400 font-mono text-sm">TZS {Number(data.gross_profit).toLocaleString()}</strong>
             </div>
           </div>
