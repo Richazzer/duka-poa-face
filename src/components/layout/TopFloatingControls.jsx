@@ -14,24 +14,33 @@ export default function TopFloatingControls() {
       if (res.data?.notifications) {
         setNotifications(res.data.notifications);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('Could not fetch notifications:', e);
+    }
   };
 
   useEffect(() => {
     fetchAlerts();
+    
+    // Listen to all possible sync events dispatched across your app
     window.addEventListener('duka_sync', fetchAlerts);
-    return () => window.removeEventListener('duka_sync', fetchAlerts);
+    window.addEventListener('duka_data_updated', fetchAlerts);
+    window.addEventListener('storage', fetchAlerts);
+
+    return () => {
+      window.removeEventListener('duka_sync', fetchAlerts);
+      window.removeEventListener('duka_data_updated', fetchAlerts);
+      window.removeEventListener('storage', fetchAlerts);
+    };
   }, []);
 
   const unreadCount = notifications.filter(n => n.unread).length;
 
   return (
     <>
-      {/* 
-        ========================================================================
-        FLOATING LIQUID GLASS BUTTONS (PERSISTENT OVER EVERY TAB)
-        ========================================================================
-      */}
+      {/* ========================================================================
+          FLOATING LIQUID GLASS BUTTONS (PERSISTENT OVER EVERY TAB)
+          ======================================================================== */}
       <div className="fixed top-4 inset-x-0 z-40 max-w-5xl mx-auto px-4 sm:px-6 flex items-center justify-between pointer-events-none select-none">
         
         {/* Left Liquid Glass Circle: KIFURUSHI / PLAN */}
@@ -57,11 +66,9 @@ export default function TopFloatingControls() {
 
       </div>
 
-      {/* 
-        ========================================================================
-        PLAN MODAL (LIQUID GLASS OVERFLOW)
-        ========================================================================
-      */}
+      {/* ========================================================================
+          PLAN MODAL (LIQUID GLASS OVERFLOW)
+          ======================================================================== */}
       {isPlanOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-fadeIn">
           <div className="w-full max-w-sm p-6 sm:p-7 rounded-[32px] bg-[#131926]/95 border border-white/15 shadow-[0_25px_60px_rgba(0,0,0,0.4)] text-center space-y-4">
@@ -101,11 +108,9 @@ export default function TopFloatingControls() {
         </div>
       )}
 
-      {/* 
-        ========================================================================
-        NOTIFICATIONS MODAL (LIQUID GLASS OVERFLOW)
-        ========================================================================
-      */}
+      {/* ========================================================================
+          NOTIFICATIONS MODAL (LIQUID GLASS OVERFLOW)
+          ======================================================================== */}
       {isNotifOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-fadeIn">
           <div className="w-full max-w-sm p-6 rounded-[32px] bg-[#131926]/95 border border-white/15 shadow-[0_25px_60px_rgba(0,0,0,0.4)] space-y-4">
