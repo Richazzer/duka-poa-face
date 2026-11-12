@@ -1,28 +1,27 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { 
-  ShoppingCart, 
-  Users, 
-  TrendingUp, 
-  TrendingDown, 
-  Package, 
-  HeartPulse, 
-  Sparkles, 
-  Boxes,
-  ArrowRight,
-  ShieldCheck,
+import {
+  ShoppingCart,
+  Users,
+  TrendingUp,
+  TrendingDown,
+  Package,
+  HeartPulse,
+  Sparkles,
   Activity,
-  Plus
 } from 'lucide-react';
 import { api } from '../config';
 
+const cardClass =
+  'rounded-[28px] border border-white/70 bg-white/65 shadow-[0_18px_55px_rgba(15,23,42,0.07)] backdrop-blur-2xl transition-all duration-300 dark:border-white/10 dark:bg-slate-900/55 dark:shadow-[0_18px_55px_rgba(0,0,0,0.28)]';
+
+const innerCardClass =
+  'rounded-2xl border border-white/70 bg-white/55 dark:border-white/10 dark:bg-white/[0.04]';
+
 export default function Overview() {
-  const navigate = useNavigate();
   const [timeframe, setTimeframe] = useState('monthly');
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const [hoveredBarIndex, setHoveredBarIndex] = useState(null);
 
-  // 100% Real Live State
   const [data, setData] = useState({
     today_sales: 0,
     yesterday_sales: 0,
@@ -34,60 +33,76 @@ export default function Overview() {
     net_worth: 0,
     category_breakdown: [],
     weekly_bars: [],
-    sales_curve: []
+    sales_curve: [],
   });
 
   const [loading, setLoading] = useState(true);
 
-  // Fetch real data & sync live POS sales securely
   const fetchRealData = async () => {
     try {
       const [analyticsRes, salesRes, productsRes] = await Promise.allSettled([
         api.get(`/analytics/economics/?period=${timeframe}`),
         api.get('/sales/'),
-        api.get('/products/')
+        api.get('/products/'),
       ]);
 
-      let analyticsData = {};
-      if (analyticsRes.status === 'fulfilled' && analyticsRes.value?.data) {
-        analyticsData = analyticsRes.value.data;
-      }
+      const analyticsData =
+        analyticsRes.status === 'fulfilled' && analyticsRes.value?.data
+          ? analyticsRes.value.data
+          : {};
 
-      let salesData = [];
-      if (salesRes.status === 'fulfilled' && salesRes.value?.data) {
-        salesData = Array.isArray(salesRes.value.data) ? salesRes.value.data : (salesRes.value.data.results || []);
-      }
+      const salesData =
+        salesRes.status === 'fulfilled' && salesRes.value?.data
+          ? Array.isArray(salesRes.value.data)
+            ? salesRes.value.data
+            : salesRes.value.data.results || []
+          : [];
 
-      let productsData = [];
-      if (productsRes.status === 'fulfilled' && productsRes.value?.data) {
-        productsData = Array.isArray(productsRes.value.data) ? productsRes.value.data : (productsRes.value.data.results || []);
-      }
+      const productsData =
+        productsRes.status === 'fulfilled' && productsRes.value?.data
+          ? Array.isArray(productsRes.value.data)
+            ? productsRes.value.data
+            : productsRes.value.data.results || []
+          : [];
 
-      // Compute accurate totals directly from live database if backend analytics payload is light
-      const totalSales = salesData.reduce((sum, s) => sum + Number(s.total_amount || s.amount || 0), 0);
-      const calculatedNetWorth = productsData.reduce((sum, p) => {
-        const price = Number(p.price || p.selling_price || 0);
-        const qty = Number(p.stock ?? p.stock_quantity ?? 0);
-        return sum + price * qty;
+      const totalSales = salesData.reduce(
+        (sum, sale) =>
+          sum + Number(sale.total_amount || sale.amount || 0),
+        0
+      );
+
+      const calculatedNetWorth = productsData.reduce((sum, product) => {
+        const price = Number(product.price || product.selling_price || 0);
+        const quantity = Number(
+          product.stock ?? product.stock_quantity ?? 0
+        );
+        return sum + price * quantity;
       }, 0);
 
-      // Generate dynamic sales curve from real transaction dates if missing
-      const dynamicCurve = salesData.length > 0 ? salesData.slice(-7).map((s, idx) => ({
-        date: s.created_at ? new Date(s.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : `Day ${idx + 1}`,
-        value: Number(s.total_amount || s.amount || 0)
-      })) : [];
+      const dynamicCurve = salesData.slice(-7).map((sale, index) => ({
+        date: sale.created_at
+          ? new Date(sale.created_at).toLocaleDateString([], {
+              month: 'short',
+              day: 'numeric',
+            })
+          : `Day ${index + 1}`,
+        value: Number(sale.total_amount || sale.amount || 0),
+      }));
 
-      setData(prev => ({
-        ...prev,
+      setData((previous) => ({
+        ...previous,
         ...analyticsData,
         today_sales: analyticsData.today_sales || totalSales,
-        total_customers: analyticsData.total_customers || salesData.length,
+        total_customers:
+          analyticsData.total_customers || salesData.length,
         today_tx_count: salesData.length,
         net_worth: analyticsData.net_worth || calculatedNetWorth,
-        sales_curve: analyticsData.sales_curve?.length ? analyticsData.sales_curve : dynamicCurve
+        sales_curve: analyticsData.sales_curve?.length
+          ? analyticsData.sales_curve
+          : dynamicCurve,
       }));
-    } catch (e) {
-      console.warn('Real metrics fetch note:', e);
+    } catch (error) {
+      console.warn('Real metrics fetch failed:', error);
     } finally {
       setLoading(false);
     }
@@ -95,9 +110,11 @@ export default function Overview() {
 
   useEffect(() => {
     fetchRealData();
+
     window.addEventListener('duka_sync', fetchRealData);
     window.addEventListener('focus', fetchRealData);
-    const interval = setInterval(fetchRealData, 5000); // Live polling sync fallback
+
+    const interval = setInterval(fetchRealData, 5000);
 
     return () => {
       window.removeEventListener('duka_sync', fetchRealData);
@@ -106,14 +123,13 @@ export default function Overview() {
     };
   }, [timeframe]);
 
-  // Responsive SVG Curve Mapping (Desktop Width: 650, Height: 180)
   const width = 650;
   const height = 180;
   const padX = 35;
   const padY = 30;
 
   const curveData = useMemo(() => {
-    if (!data.sales_curve || data.sales_curve.length === 0) {
+    if (!data.sales_curve?.length) {
       return [
         { date: '1 Apr', value: 0 },
         { date: '8 Apr', value: 0 },
@@ -125,35 +141,51 @@ export default function Overview() {
     return data.sales_curve;
   }, [data.sales_curve]);
 
-  const maxVal = Math.max(...curveData.map(c => c.value), 20000);
+  const maxVal = Math.max(...curveData.map((point) => point.value), 20000);
 
-  const points = useMemo(() => {
-    return curveData.map((c, i) => {
-      const x = padX + (i / Math.max(1, curveData.length - 1)) * (width - padX * 2);
-      const y = height - padY - (c.value / maxVal) * (height - padY * 2);
-      return { ...c, x, y };
-    });
-  }, [curveData, maxVal]);
+  const points = useMemo(
+    () =>
+      curveData.map((point, index) => {
+        const x =
+          padX +
+          (index / Math.max(1, curveData.length - 1)) *
+            (width - padX * 2);
+        const y =
+          height -
+          padY -
+          (point.value / maxVal) * (height - padY * 2);
 
-  const curvePath = useMemo(() => {
-    return points.reduce((acc, pt, i, arr) => {
-      if (i === 0) return `M ${pt.x},${pt.y}`;
-      const prev = arr[i - 1];
-      const cx = prev.x + (pt.x - prev.x) / 2;
-      return `${acc} C ${cx},${prev.y} ${cx},${pt.y} ${pt.x},${pt.y}`;
-    }, '');
-  }, [points]);
+        return { ...point, x, y };
+      }),
+    [curveData, maxVal]
+  );
+
+  const curvePath = useMemo(
+    () =>
+      points.reduce((path, point, index, allPoints) => {
+        if (index === 0) return `M ${point.x},${point.y}`;
+
+        const previous = allPoints[index - 1];
+        const controlX = previous.x + (point.x - previous.x) / 2;
+
+        return `${path} C ${controlX},${previous.y} ${controlX},${point.y} ${point.x},${point.y}`;
+      }, ''),
+    [points]
+  );
 
   const areaPath = useMemo(() => {
-    if (points.length === 0) return '';
-    return `${curvePath} L ${points[points.length - 1].x},${height - padY} L ${points[0].x},${height - padY} Z`;
+    if (!points.length) return '';
+
+    return `${curvePath} L ${points[points.length - 1].x},${
+      height - padY
+    } L ${points[0].x},${height - padY} Z`;
   }, [curvePath, points]);
 
-  // Top Categories (Fallback to inventory if no sales yet)
   const categoriesList = useMemo(() => {
-    if (data.category_breakdown && data.category_breakdown.length > 0) {
+    if (data.category_breakdown?.length) {
       return data.category_breakdown;
     }
+
     return [
       { name: 'Vinywaji', percent: 35, color: '#6366f1' },
       { name: 'Vyakula', percent: 25, color: '#38bdf8' },
@@ -162,11 +194,9 @@ export default function Overview() {
     ];
   }, [data.category_breakdown]);
 
-  // Weekly Bars (Mon - Sun)
   const weeklyBars = useMemo(() => {
-    if (data.weekly_bars && data.weekly_bars.length > 0) {
-      return data.weekly_bars;
-    }
+    if (data.weekly_bars?.length) return data.weekly_bars;
+
     return [
       { day: 'Mon', value: 0 },
       { day: 'Tue', value: 0 },
@@ -178,168 +208,207 @@ export default function Overview() {
     ];
   }, [data.weekly_bars]);
 
-  const maxBarVal = Math.max(...weeklyBars.map(b => b.value), 1);
+  const maxBarVal = Math.max(...weeklyBars.map((bar) => bar.value), 1);
+  const activePoint =
+    hoveredIndex !== null ? points[hoveredIndex] : points[points.length - 1];
 
-  // Active Tooltip Point
-  const activePoint = hoveredIndex !== null ? points[hoveredIndex] : points[points.length - 1];
+  const money = (value) => Number(value || 0).toLocaleString();
+
+  const metricCards = [
+    {
+      title: 'Total Users',
+      value: money(data.total_customers),
+      detail: `+${data.customer_growth || 0}%`,
+      icon: Users,
+      color:
+        'border-indigo-200/70 bg-indigo-50/80 text-indigo-600 dark:border-indigo-400/20 dark:bg-indigo-400/10 dark:text-indigo-300',
+      detailColor: 'text-emerald-600 dark:text-emerald-400',
+      trend: <TrendingUp className="h-3.5 w-3.5" />,
+    },
+    {
+      title: 'Sales (Mauzo)',
+      value: `TZS ${money(data.today_sales)}`,
+      detail:
+        data.sales_growth >= 0
+          ? `+${data.sales_growth || 0}%`
+          : `${data.sales_growth}%`,
+      icon: ShoppingCart,
+      color:
+        'border-blue-200/70 bg-blue-50/80 text-blue-600 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-300',
+      detailColor:
+        data.sales_growth >= 0
+          ? 'text-emerald-600 dark:text-emerald-400'
+          : 'text-rose-600 dark:text-rose-400',
+      trend:
+        data.sales_growth >= 0 ? (
+          <TrendingUp className="h-3.5 w-3.5" />
+        ) : (
+          <TrendingDown className="h-3.5 w-3.5" />
+        ),
+    },
+    {
+      title: 'Orders (Risiti)',
+      value: money(data.today_tx_count || data.sales_curve?.length || 0),
+      detail: 'Miamala Halisi',
+      icon: Package,
+      color:
+        'border-purple-200/70 bg-purple-50/80 text-purple-600 dark:border-purple-400/20 dark:bg-purple-400/10 dark:text-purple-300',
+      detailColor: 'text-blue-600 dark:text-blue-400',
+      trend: <Activity className="h-3.5 w-3.5" />,
+    },
+    {
+      title: 'Thamani Halisi (Net Worth)',
+      value: `TZS ${money(data.net_worth)}`,
+      detail: 'Stoo + Mauzo + Madeni',
+      icon: Sparkles,
+      color:
+        'border-emerald-200/70 bg-emerald-50/80 text-emerald-600 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-300',
+      detailColor: 'text-slate-500 dark:text-slate-400',
+      trend: null,
+    },
+  ];
 
   return (
-    <div className="space-y-6 select-none font-sans text-slate-100">
-      
-      {/* 
-        ========================================================================
-        1. TOP METRIC CARDS (Exact match to reference photo with glowing icons)
-        ========================================================================
-      */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        
-        {/* Total Users */}
-        <div className="p-5 rounded-[26px] bg-[#121724]/90 backdrop-blur-3xl border border-white/10 shadow-[0_12px_32px_rgba(0,0,0,0.3)] hover:border-indigo-500/40 hover:shadow-[0_0_25px_rgba(99,102,241,0.15)] hover:-translate-y-1 transition-all duration-300 flex items-center justify-between group">
-          <div>
-            <p className="text-xs font-semibold text-slate-400">Total Users</p>
-            <h3 className="text-2xl font-black text-white mt-1">
-              {data.total_customers.toLocaleString()}
-            </h3>
-            <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1 mt-1.5">
-              <TrendingUp className="w-3.5 h-3.5" /> +{data.customer_growth}%
-            </span>
-          </div>
-          <div className="w-13 h-13 rounded-2xl bg-indigo-600/25 text-indigo-400 border border-indigo-500/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner">
-            <Users className="w-6 h-6" />
-          </div>
-        </div>
+    <main className="space-y-5 pb-28 font-sans text-slate-900 dark:text-slate-100">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {metricCards.map((metric) => {
+          const Icon = metric.icon;
 
-        {/* Sales */}
-        <div className="p-5 rounded-[26px] bg-[#121724]/90 backdrop-blur-3xl border border-white/10 shadow-[0_12px_32px_rgba(0,0,0,0.3)] hover:border-blue-500/40 hover:shadow-[0_0_25px_rgba(59,130,246,0.15)] hover:-translate-y-1 transition-all duration-300 flex items-center justify-between group">
-          <div>
-            <p className="text-xs font-semibold text-slate-400">Sales (Mauzo)</p>
-            <h3 className="text-2xl font-black text-white mt-1">
-              TZS {data.today_sales.toLocaleString()}
-            </h3>
-            <span className={`text-[11px] font-bold flex items-center gap-1 mt-1.5 ${data.sales_growth >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {data.sales_growth >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-              {data.sales_growth >= 0 ? `+${data.sales_growth}%` : `${data.sales_growth}%`}
-            </span>
-          </div>
-          <div className="w-13 h-13 rounded-2xl bg-blue-600/25 text-blue-400 border border-blue-500/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner">
-            <ShoppingCart className="w-6 h-6" />
-          </div>
-        </div>
-
-        {/* Orders / Miamala */}
-        <div className="p-5 rounded-[26px] bg-[#121724]/90 backdrop-blur-3xl border border-white/10 shadow-[0_12px_32px_rgba(0,0,0,0.3)] hover:border-purple-500/40 hover:shadow-[0_0_25px_rgba(168,85,247,0.15)] hover:-translate-y-1 transition-all duration-300 flex items-center justify-between group">
-          <div>
-            <p className="text-xs font-semibold text-slate-400">Orders (Risiti)</p>
-            <h3 className="text-2xl font-black text-white mt-1">
-              {(data.today_tx_count || data.sales_curve?.length || 0).toLocaleString()}
-            </h3>
-            <span className="text-[11px] font-bold text-blue-400 flex items-center gap-1 mt-1.5">
-              <Activity className="w-3.5 h-3.5" /> Miamala Halisi
-            </span>
-          </div>
-          <div className="w-13 h-13 rounded-2xl bg-purple-600/25 text-purple-400 border border-purple-500/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner">
-            <Package className="w-6 h-6" />
-          </div>
-        </div>
-
-        {/* Thamani Halisi (Net Worth) */}
-        <div className="p-5 rounded-[26px] bg-[#121724]/90 backdrop-blur-3xl border border-white/10 shadow-[0_12px_32px_rgba(0,0,0,0.3)] hover:border-emerald-500/40 hover:shadow-[0_0_25px_rgba(16,185,129,0.15)] hover:-translate-y-1 transition-all duration-300 flex items-center justify-between group">
-          <div>
-            <p className="text-xs font-semibold text-slate-400">Thamani Halisi (Net Worth)</p>
-            <h3 className="text-2xl font-black text-emerald-400 mt-1">
-              TZS {data.net_worth.toLocaleString()}
-            </h3>
-            <span className="text-[10px] font-bold text-slate-400 block mt-1.5">
-              Stoo + Mauzo + Madeni
-            </span>
-          </div>
-          <div className="w-13 h-13 rounded-2xl bg-emerald-600/25 text-emerald-400 border border-emerald-500/30 flex items-center justify-center group-hover:scale-110 transition-transform shadow-inner">
-            <Sparkles className="w-6 h-6" />
-          </div>
-        </div>
-
-      </div>
-
-      {/* 
-        ========================================================================
-        2. SALES OVERVIEW GRAPH (Interactive Glowing Wave Curve)
-        ========================================================================
-      */}
-      <div className="p-6 sm:p-7 rounded-[32px] bg-[#121724]/90 backdrop-blur-3xl border border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.35)] hover:border-indigo-500/30 transition-all duration-300 space-y-4">
-        
-        {/* Graph Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
-          <div>
-            <h2 className="text-lg font-black text-white tracking-tight flex items-center gap-2">
-              Sales Overview <span className="text-xs font-normal text-slate-400">({timeframe === 'monthly' ? 'This Month' : timeframe === 'weekly' ? 'This Week' : 'Today'})</span>
-            </h2>
-            <p className="text-xs text-slate-400 mt-0.5">Mwelekeo halisi wa kiasi cha mauzo kilichokusanywa</p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <select
-              value={timeframe}
-              onChange={(e) => setTimeframe(e.target.value)}
-              className="text-xs font-bold bg-[#1a2336] text-white border border-slate-700/80 rounded-xl px-3 py-1.5 outline-none cursor-pointer hover:border-indigo-500 transition-colors"
+          return (
+            <article
+              key={metric.title}
+              className={`${cardClass} group relative flex items-center justify-between gap-3 overflow-hidden p-5 hover:-translate-y-1 hover:shadow-[0_22px_60px_rgba(15,23,42,0.12)] dark:hover:shadow-[0_22px_60px_rgba(0,0,0,0.36)]`}
             >
-              <option value="daily">Today</option>
-              <option value="weekly">This Week</option>
-              <option value="monthly">This Month</option>
-            </select>
+              <div className="pointer-events-none absolute -right-12 -top-16 h-36 w-36 rounded-full bg-blue-400/10 blur-3xl" />
+
+              <div className="relative min-w-0">
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {metric.title}
+                </p>
+
+                <h2 className="mt-1 truncate text-2xl font-black tracking-tight text-slate-950 dark:text-white">
+                  {metric.value}
+                </h2>
+
+                <span
+                  className={`mt-1.5 flex items-center gap-1 text-[11px] font-bold ${metric.detailColor}`}
+                >
+                  {metric.trend}
+                  {metric.detail}
+                </span>
+              </div>
+
+              <div
+                className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border shadow-inner transition-transform group-hover:scale-105 ${metric.color}`}
+              >
+                <Icon className="h-6 w-6" />
+              </div>
+            </article>
+          );
+        })}
+      </section>
+
+      <section className={`${cardClass} space-y-4 p-5 sm:p-7`}>
+        <div className="flex flex-col justify-between gap-3 border-b border-slate-200/70 pb-4 dark:border-white/10 sm:flex-row sm:items-center">
+          <div>
+            <h2 className="flex flex-wrap items-center gap-2 text-lg font-black tracking-tight text-slate-950 dark:text-white">
+              Sales Overview
+              <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                (
+                {timeframe === 'monthly'
+                  ? 'This Month'
+                  : timeframe === 'weekly'
+                    ? 'This Week'
+                    : 'Today'}
+                )
+              </span>
+            </h2>
+
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+              Mwelekeo halisi wa kiasi cha mauzo kilichokusanywa
+            </p>
           </div>
+
+          <select
+            value={timeframe}
+            onChange={(event) => setTimeframe(event.target.value)}
+            className="rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-xs font-bold text-slate-800 outline-none transition hover:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 dark:border-white/10 dark:bg-slate-950/40 dark:text-white"
+          >
+            <option value="daily">Today</option>
+            <option value="weekly">This Week</option>
+            <option value="monthly">This Month</option>
+          </select>
         </div>
 
-        {/* SVG Curve Canvas with Floating Glowing Tooltip */}
-        <div className="relative pt-6 pb-2">
-          
-          {/* Active Tooltip Badge (Tracks hovered point or latest point) */}
+        <div className="relative px-1 pb-2 pt-7">
           {activePoint && (
-            <div 
-              className="absolute -top-1 transition-all duration-150 transform -translate-x-1/2 bg-indigo-600 text-white font-mono text-[11px] font-black px-3 py-1 rounded-xl shadow-lg shadow-indigo-600/40 pointer-events-none z-20 flex items-center gap-1.5"
+            <div
+              className="pointer-events-none absolute top-0 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-xl border border-indigo-300/30 bg-indigo-600 px-3 py-1 text-[10px] font-black text-white shadow-lg shadow-indigo-600/25"
               style={{ left: `${(activePoint.x / width) * 100}%` }}
             >
               <span>{activePoint.date}:</span>
-              <span>TZS {activePoint.value.toLocaleString()}</span>
+              <span>TZS {money(activePoint.value)}</span>
             </div>
           )}
 
-          <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
+          <svg
+            viewBox={`0 0 ${width} ${height}`}
+            className="h-auto w-full overflow-visible"
+            role="img"
+            aria-label="Sales overview chart"
+          >
             <defs>
-              {/* Purple/Indigo Wave Glow */}
-              <linearGradient id="purpleNeonGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#6366f1" stopOpacity="0.45" />
-                <stop offset="60%" stopColor="#8b5cf6" stopOpacity="0.1" />
-                <stop offset="100%" stopColor="#6366f1" stopOpacity="0.0" />
+              <linearGradient
+                id="overviewAreaGradient"
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="1"
+              >
+                <stop offset="0%" stopColor="#6366f1" stopOpacity="0.38" />
+                <stop offset="65%" stopColor="#8b5cf6" stopOpacity="0.1" />
+                <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
               </linearGradient>
 
-              <filter id="neonLineGlow" x="-20%" y="-20%" width="140%" height="140%">
-                <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor="#818cf8" floodOpacity="0.6" />
+              <filter
+                id="overviewLineGlow"
+                x="-20%"
+                y="-20%"
+                width="140%"
+                height="140%"
+              >
+                <feDropShadow
+                  dx="0"
+                  dy="2"
+                  stdDeviation="4"
+                  floodColor="#818cf8"
+                  floodOpacity="0.55"
+                />
               </filter>
             </defs>
 
-            {/* Dotted Horizontal Guidelines */}
-            {[0.2, 0.5, 0.8].map((ratio, i) => {
+            {[0.2, 0.5, 0.8].map((ratio, index) => {
               const y = padY + ratio * (height - padY * 2);
+
               return (
-                <line 
-                  key={i} 
-                  x1={padX} 
-                  y1={y} 
-                  x2={width - padX} 
-                  y2={y} 
-                  stroke="#1e293b" 
-                  strokeDasharray="4 4" 
-                  strokeWidth="1" 
+                <line
+                  key={index}
+                  x1={padX}
+                  y1={y}
+                  x2={width - padX}
+                  y2={y}
+                  stroke="currentColor"
+                  className="text-slate-200 dark:text-slate-700"
+                  strokeDasharray="4 5"
+                  strokeWidth="1"
                 />
               );
             })}
 
-            {/* Gradient Shaded Area */}
             {points.length > 0 && (
-              <path d={areaPath} fill="url(#purpleNeonGrad)" />
+              <path d={areaPath} fill="url(#overviewAreaGradient)" />
             )}
 
-            {/* Glowing Wave Line */}
             {points.length > 0 && (
               <path
                 d={curvePath}
@@ -347,235 +416,278 @@ export default function Overview() {
                 stroke="#818cf8"
                 strokeWidth="3.5"
                 strokeLinecap="round"
-                filter="url(#neonLineGlow)"
+                filter="url(#overviewLineGlow)"
               />
             )}
 
-            {/* Interactive Data Points */}
-            {points.map((pt, i) => {
-              const isSelected = activePoint?.date === pt.date;
+            {points.map((point, index) => {
+              const isSelected = activePoint?.date === point.date;
+
               return (
-                <g 
-                  key={i} 
+                <g
+                  key={`${point.date}-${index}`}
                   className="cursor-pointer"
-                  onMouseEnter={() => setHoveredIndex(i)}
-                  onTouchStart={() => setHoveredIndex(i)}
+                  onMouseEnter={() => setHoveredIndex(index)}
+                  onTouchStart={() => setHoveredIndex(index)}
                 >
-                  <rect x={pt.x - 20} y={0} width={40} height={height} fill="transparent" />
-                  
-                  {/* Outer Pulsing Glow */}
-                  {isSelected && (
-                    <circle cx={pt.x} cy={pt.y} r="8" fill="#6366f1" className="animate-ping opacity-35" />
-                  )}
-                  {/* Point */}
-                  <circle 
-                    cx={pt.x} 
-                    cy={pt.y} 
-                    r={isSelected ? "5.5" : "4"} 
-                    fill="#6366f1" 
-                    stroke="#ffffff" 
-                    strokeWidth="2" 
-                    className="transition-all duration-200"
+                  <rect
+                    x={point.x - 20}
+                    y={0}
+                    width={40}
+                    height={height}
+                    fill="transparent"
                   />
-                  {/* Date Label */}
-                  <text 
-                    x={pt.x} 
-                    y={height - 8} 
-                    textAnchor="middle" 
-                    className="text-[10px] fill-slate-400 font-mono font-bold"
+
+                  {isSelected && (
+                    <circle
+                      cx={point.x}
+                      cy={point.y}
+                      r="8"
+                      fill="#6366f1"
+                      className="animate-ping opacity-30"
+                    />
+                  )}
+
+                  <circle
+                    cx={point.x}
+                    cy={point.y}
+                    r={isSelected ? '5.5' : '4'}
+                    fill="#6366f1"
+                    stroke="white"
+                    strokeWidth="2"
+                  />
+
+                  <text
+                    x={point.x}
+                    y={height - 8}
+                    textAnchor="middle"
+                    className="fill-slate-500 font-mono text-[10px] font-bold dark:fill-slate-400"
                   >
-                    {pt.date}
+                    {point.date}
                   </text>
                 </g>
               );
             })}
           </svg>
         </div>
-      </div>
+      </section>
 
-      {/* 
-        ========================================================================
-        3. SPLIT SECTION: TOP CATEGORIES DONUT (LEFT) & USERS BAR CHART (RIGHT)
-        ========================================================================
-      */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        
-        {/* Left: Top Categories Donut Ring */}
-        <div className="p-6 rounded-[32px] bg-[#121724]/90 backdrop-blur-3xl border border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.35)] hover:border-indigo-500/30 transition-all duration-300 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <article className={`${cardClass} space-y-4 p-5 sm:p-6`}>
+          <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 pb-3 dark:border-white/10">
             <div>
-              <h2 className="text-base font-black text-white">Top Categories</h2>
-              <p className="text-[11px] text-slate-400">Mgao wa bidhaa zilizopo stoo</p>
+              <h2 className="text-base font-black text-slate-950 dark:text-white">
+                Top Categories
+              </h2>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Mgao wa bidhaa zilizopo stoo
+              </p>
             </div>
-            <span className="text-xs font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-1 rounded-xl">
+
+            <span className="rounded-xl border border-indigo-200/70 bg-indigo-50/80 px-2.5 py-1 text-xs font-bold text-indigo-700 dark:border-indigo-300/15 dark:bg-indigo-400/10 dark:text-indigo-300">
               This Month
             </span>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-6 pt-2">
-            
-            {/* SVG Donut Ring */}
-            <div className="relative w-36 h-36 shrink-0 flex items-center justify-center">
-              <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+          <div className="flex flex-col items-center justify-between gap-6 pt-2 sm:flex-row">
+            <div className="relative flex h-36 w-36 shrink-0 items-center justify-center">
+              <svg viewBox="0 0 100 100" className="-rotate-90">
                 {(() => {
-                  let accumulatedOffset = 0;
+                  let offset = 0;
                   const circumference = 238.7;
-                  return categoriesList.map((cat, i) => {
-                    const strokeLen = (cat.percent / 100) * circumference;
-                    const strokeDasharray = `${strokeLen} ${circumference - strokeLen}`;
-                    const strokeDashoffset = -accumulatedOffset;
-                    accumulatedOffset += strokeLen;
+
+                  return categoriesList.map((category, index) => {
+                    const percent = Number(category.percent || 0);
+                    const strokeLength = (percent / 100) * circumference;
+                    const dashArray = `${strokeLength} ${
+                      circumference - strokeLength
+                    }`;
+                    const dashOffset = -offset;
+
+                    offset += strokeLength;
 
                     return (
                       <circle
-                        key={i}
+                        key={`${category.name}-${index}`}
                         cx="50"
                         cy="50"
                         r="38"
                         fill="transparent"
-                        stroke={cat.color}
+                        stroke={category.color}
                         strokeWidth="15"
-                        strokeDasharray={strokeDasharray}
-                        strokeDashoffset={strokeDashoffset}
-                        className="transition-all duration-500 hover:opacity-80 cursor-pointer"
+                        strokeDasharray={dashArray}
+                        strokeDashoffset={dashOffset}
                       />
                     );
                   });
                 })()}
               </svg>
+
               <div className="absolute text-center">
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Total</span>
-                <span className="text-sm font-black text-white">100%</span>
+                <span className="block text-[9px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                  Total
+                </span>
+                <span className="text-sm font-black text-slate-950 dark:text-white">
+                  100%
+                </span>
               </div>
             </div>
 
-            {/* Category Legend List */}
-            <div className="flex-1 w-full space-y-2.5">
-              {categoriesList.map((cat, i) => (
-                <div key={i} className="flex items-center justify-between text-xs p-2 rounded-xl bg-[#192233]/70 border border-slate-800/80">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-3 h-3 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: cat.color }}></span>
-                    <span className="text-slate-300 font-semibold text-xs truncate max-w-[130px]">{cat.name}</span>
+            <div className="w-full flex-1 space-y-2.5">
+              {categoriesList.map((category, index) => (
+                <div
+                  key={`${category.name}-${index}`}
+                  className={`${innerCardClass} flex items-center justify-between gap-3 p-2.5`}
+                >
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-full"
+                      style={{ backgroundColor: category.color }}
+                    />
+                    <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      {category.name}
+                    </span>
                   </div>
-                  <span className="font-mono font-black text-white text-xs">{cat.percent}%</span>
+
+                  <span className="font-mono text-xs font-black text-slate-950 dark:text-white">
+                    {category.percent}%
+                  </span>
                 </div>
               ))}
             </div>
-
           </div>
-        </div>
+        </article>
 
-        {/* Right: Users Overview Weekly Bar Chart */}
-        <div className="p-6 rounded-[32px] bg-[#121724]/90 backdrop-blur-3xl border border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.35)] hover:border-purple-500/30 transition-all duration-300 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+        <article className={`${cardClass} space-y-4 p-5 sm:p-6`}>
+          <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 pb-3 dark:border-white/10">
             <div>
-              <h2 className="text-base font-black text-white">Users Overview</h2>
-              <p className="text-[11px] text-slate-400">Mzunguko wa siku 7 zilizopita</p>
+              <h2 className="text-base font-black text-slate-950 dark:text-white">
+                Users Overview
+              </h2>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Mzunguko wa siku 7 zilizopita
+              </p>
             </div>
-            <span className="text-xs font-bold text-purple-400 bg-purple-500/10 border border-purple-500/20 px-2.5 py-1 rounded-xl">
+
+            <span className="rounded-xl border border-purple-200/70 bg-purple-50/80 px-2.5 py-1 text-xs font-bold text-purple-700 dark:border-purple-300/15 dark:bg-purple-400/10 dark:text-purple-300">
               This Week
             </span>
           </div>
 
-          {/* Vertical Bar Chart with Hover Tooltips */}
-          <div className="flex items-end justify-between h-40 pt-4 px-2 gap-2 sm:gap-3">
-            {weeklyBars.map((bar, i) => {
-              const heightPct = bar.value > 0 ? Math.max(15, Math.round((bar.value / maxBarVal) * 100)) : 6;
-              const isBarHovered = hoveredBarIndex === i;
+          <div className="flex h-40 items-end justify-between gap-2 px-2 pt-4 sm:gap-3">
+            {weeklyBars.map((bar, index) => {
+              const value = Number(bar.value || 0);
+              const barHeight =
+                value > 0
+                  ? Math.max(15, Math.round((value / maxBarVal) * 100))
+                  : 6;
+              const isHovered = hoveredBarIndex === index;
 
               return (
-                <div 
-                  key={i} 
-                  className="flex-1 flex flex-col items-center gap-2 h-full justify-end group cursor-pointer relative"
-                  onMouseEnter={() => setHoveredBarIndex(i)}
+                <div
+                  key={`${bar.day}-${index}`}
+                  className="group relative flex h-full flex-1 cursor-pointer flex-col items-center justify-end gap-2"
+                  onMouseEnter={() => setHoveredBarIndex(index)}
                   onMouseLeave={() => setHoveredBarIndex(null)}
+                  onFocus={() => setHoveredBarIndex(index)}
+                  onBlur={() => setHoveredBarIndex(null)}
+                  tabIndex={0}
+                  aria-label={`${bar.day}: TZS ${money(value)}`}
                 >
-                  {/* Tooltip on bar hover */}
-                  {isBarHovered && (
-                    <div className="absolute -top-7 z-10 bg-purple-600 text-white font-mono text-[9px] font-bold px-2 py-0.5 rounded-lg shadow-lg whitespace-nowrap">
-                      TZS {bar.value.toLocaleString()}
+                  {isHovered && (
+                    <div className="absolute -top-7 z-10 whitespace-nowrap rounded-lg border border-purple-300/20 bg-purple-600 px-2 py-0.5 font-mono text-[9px] font-bold text-white shadow-lg">
+                      TZS {money(value)}
                     </div>
                   )}
 
-                  <div 
-                    className={`w-full max-w-[24px] rounded-t-xl transition-all duration-300 ${
-                      bar.value > 0 
-                        ? 'bg-gradient-to-t from-indigo-700 via-purple-600 to-indigo-400 group-hover:brightness-125 shadow-lg shadow-indigo-600/30' 
-                        : 'bg-slate-800/80 group-hover:bg-slate-700'
+                  <div
+                    className={`w-full max-w-6 rounded-t-xl transition-all duration-300 ${
+                      value > 0
+                        ? 'bg-gradient-to-t from-indigo-700 via-purple-600 to-indigo-400 shadow-lg shadow-indigo-600/20 group-hover:brightness-110'
+                        : 'bg-slate-200 group-hover:bg-slate-300 dark:bg-slate-700 dark:group-hover:bg-slate-600'
                     }`}
-                    style={{ height: `${heightPct}%` }}
-                  ></div>
-                  <span className="text-[10px] font-mono font-bold text-slate-400 group-hover:text-white transition-colors">
+                    style={{ height: `${barHeight}%` }}
+                  />
+
+                  <span className="text-[10px] font-mono font-bold text-slate-500 transition-colors group-hover:text-slate-900 dark:text-slate-400 dark:group-hover:text-white">
                     {bar.day}
                   </span>
                 </div>
               );
             })}
           </div>
-        </div>
+        </article>
+      </section>
 
-      </div>
-
-      {/* 
-        ========================================================================
-        4. BUSINESS HEALTH SCORECARD (Exact specification with 3 insights)
-        ========================================================================
-      */}
-      <div className="p-6 sm:p-7 rounded-[32px] bg-[#121724]/90 backdrop-blur-3xl border border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.35)] hover:border-emerald-500/30 transition-all duration-300 space-y-4">
-        
-        <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+      <section className={`${cardClass} space-y-4 p-5 sm:p-7`}>
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 pb-3 dark:border-white/10">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-              <HeartPulse className="w-4 h-4" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-200/70 bg-emerald-50 text-emerald-600 dark:border-emerald-300/15 dark:bg-emerald-400/10 dark:text-emerald-300">
+              <HeartPulse className="h-4 w-4" />
             </div>
+
             <div>
-              <h3 className="text-sm font-black uppercase tracking-wider text-white">Business Health</h3>
-              <p className="text-[10px] text-slate-400 italic">Illustrative score, live assessment from real data</p>
+              <h2 className="text-sm font-black uppercase tracking-wider text-slate-950 dark:text-white">
+                Business Health
+              </h2>
+              <p className="text-[10px] italic text-slate-500 dark:text-slate-400">
+                Illustrative score, live assessment from real data
+              </p>
             </div>
           </div>
-          
-          <span className="text-sm font-black font-mono text-emerald-400 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 shadow-xs">
+
+          <span className="rounded-full border border-emerald-200/70 bg-emerald-50/80 px-3 py-1 font-mono text-sm font-black text-emerald-700 dark:border-emerald-300/20 dark:bg-emerald-400/10 dark:text-emerald-300">
             {data.health_score}/100
           </span>
         </div>
 
-        {/* 3 Insight Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
-          
-          {/* Insight 1: Sales */}
-          <div className="p-4 rounded-2xl bg-[#192233]/70 border border-slate-800/80 space-y-1.5 hover:border-amber-500/40 transition-colors">
-            <p className="text-xs font-black text-amber-400 flex items-center gap-1.5">
-              <TrendingDown className="w-4 h-4" /> Sales are steady
+        <div className="grid grid-cols-1 gap-3 pt-1 md:grid-cols-3">
+          <article
+            className={`${innerCardClass} space-y-1.5 p-4 transition hover:border-amber-300/70 dark:hover:border-amber-300/30`}
+          >
+            <h3 className="flex items-center gap-1.5 text-xs font-black text-amber-700 dark:text-amber-300">
+              <TrendingDown className="h-4 w-4" />
+              Sales are steady
+            </h3>
+            <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+              Compare actual sales with the previous equivalent period to
+              identify the change.
             </p>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              Compare actual sales with the previous equivalent period to identify the change.
-            </p>
-          </div>
+          </article>
 
-          {/* Insight 2: Stock */}
-          <div className="p-4 rounded-2xl bg-[#192233]/70 border border-slate-800/80 space-y-1.5 hover:border-blue-500/40 transition-colors">
-            <p className="text-xs font-black text-blue-400 flex items-center gap-1.5">
-              <Package className="w-4 h-4" /> Stock needs attention
+          <article
+            className={`${innerCardClass} space-y-1.5 p-4 transition hover:border-blue-300/70 dark:hover:border-blue-300/30`}
+          >
+            <h3 className="flex items-center gap-1.5 text-xs font-black text-blue-700 dark:text-blue-300">
+              <Package className="h-4 w-4" />
+              Stock needs attention
+            </h3>
+            <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+              Identify products below their configured reorder levels and
+              estimate replenishment needs.
             </p>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              Identify products below their configured reorder levels and estimate replenishment needs.
-            </p>
-          </div>
+          </article>
 
-          {/* Insight 3: Recommended Action */}
-          <div className="p-4 rounded-2xl bg-[#192233]/70 border border-slate-800/80 space-y-1.5 hover:border-emerald-500/40 transition-colors">
-            <p className="text-xs font-black text-emerald-400 flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4" /> Recommended action
+          <article
+            className={`${innerCardClass} space-y-1.5 p-4 transition hover:border-emerald-300/70 dark:hover:border-emerald-300/30`}
+          >
+            <h3 className="flex items-center gap-1.5 text-xs font-black text-emerald-700 dark:text-emerald-300">
+              <Sparkles className="h-4 w-4" />
+              Recommended action
+            </h3>
+            <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+              Review your best-selling products and available margins before
+              your next stock purchase.
             </p>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              Review your best-selling products and available margins before your next stock purchase.
-            </p>
-          </div>
-
+          </article>
         </div>
+      </section>
 
-      </div>
-
-    </div>
+      {loading && (
+        <p className="sr-only" aria-live="polite">
+          Loading dashboard data
+        </p>
+      )}
+    </main>
   );
 }
