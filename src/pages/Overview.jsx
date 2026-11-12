@@ -195,40 +195,34 @@ export default function Overview() {
     return days;
   }, [data.sales]);
 
-  const categoryData = useMemo(() => {
-    const serverCategories = data.analytics?.category_breakdown;
+  const categoriesList = useMemo(() => {
+  if (Array.isArray(data.category_breakdown) && data.category_breakdown.length) {
+    return data.category_breakdown;
+  }
 
-    if (Array.isArray(serverCategories) && serverCategories.length > 0) {
-      return serverCategories
-        .map((category) => ({
-          name: category.name || category.category || 'Nyingine',
-          value: Number(category.percent ?? category.value ?? 0),
-          color: category.color || '#8b7cff',
-        }))
-        .slice(0, 5);
-    }
+  const products = Array.isArray(data.products) ? data.products : [];
+  if (products.length === 0) return [];
 
-    const counts = new Map();
+  const counts = new Map();
 
-    data.products.forEach((product) => {
-      const name =
-        typeof product.category === 'string'
-          ? product.category
-          : product.category?.name || product.category_name || 'Nyingine';
+  products.forEach((product) => {
+    const name =
+      typeof product.category === 'string'
+        ? product.category
+        : product.category?.name || product.category_name || 'Nyingine';
 
-      counts.set(name, (counts.get(name) || 0) + 1);
-    });
+    counts.set(name, (counts.get(name) || 0) + 1);
+  });
 
-    const palette = ['#8b7cff', '#55b6ff', '#35d6aa', '#ffbc66', '#f28bb8'];
-    const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]);
-    const total = entries.reduce((sum, [, count]) => sum + count, 0);
+  const total = [...counts.values()].reduce((sum, count) => sum + count, 0);
+  const colors = ['#8b7cff', '#55b6ff', '#35d6aa', '#ffbc66', '#f28bb8'];
 
-    return entries.slice(0, 5).map(([name, count], index) => ({
-      name,
-      value: total ? Math.round((count / total) * 100) : 0,
-      color: palette[index % palette.length],
-    }));
-  }, [data.analytics, data.products]);
+  return [...counts.entries()].map(([name, count], index) => ({
+    name,
+    percent: Math.round((count / total) * 100),
+    color: colors[index % colors.length],
+  }));
+}, [data.category_breakdown, data.products]);
 
   const chartWidth = 720;
   const chartHeight = 250;
