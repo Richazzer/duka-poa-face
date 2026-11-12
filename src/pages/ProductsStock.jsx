@@ -1,14 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { 
   Plus, 
   Search, 
   RefreshCw, 
-  AlertTriangle, 
-  CheckCircle2, 
-  XCircle, 
-  Boxes,
-  PlusCircle,
-  MinusCircle
+  Boxes, 
+  PlusCircle, 
+  MinusCircle 
 } from 'lucide-react';
 import Modal from '../components/common/Modal';
 import { api } from '../config';
@@ -21,12 +18,12 @@ export default function ProductsStock() {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ name: '', category: '', sellingPrice: '', stockQuantity: '' });
 
-  // 1. Fetch Products
+  // 1. Fetch Products & Listen to Real-Time Sync
   const fetchProducts = async () => {
     setLoading(true);
     try {
       const res = await api.get('/products/');
-      setProducts(res.data || []);
+      setProducts(Array.isArray(res.data) ? res.data : (res.data.results || []));
     } catch (e) {
       console.warn('Stock fetch error:', e);
     } finally {
@@ -36,9 +33,19 @@ export default function ProductsStock() {
 
   useEffect(() => {
     fetchProducts();
+    const handleSync = () => fetchProducts();
+    window.addEventListener('duka_sync', handleSync);
+    window.addEventListener('duka_data_updated', handleSync);
+    window.addEventListener('storage', handleSync);
+
+    return () => {
+      window.removeEventListener('duka_sync', handleSync);
+      window.removeEventListener('duka_data_updated', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
   }, []);
 
-  // 2. Save Product (Shows real error if rejected)
+  // 2. Save Product & Broadcast Sync
   const handleSaveProduct = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -60,25 +67,23 @@ export default function ProductsStock() {
       setProducts((prev) => [res.data, ...prev]);
       setIsModalOpen(false);
       setForm({ name: '', category: '', sellingPrice: '', stockQuantity: '' });
+
+      // Broadcast real-time updates to POS and Overview
+      window.dispatchEvent(new Event('duka_sync'));
+      window.dispatchEvent(new Event('duka_data_updated'));
+      window.dispatchEvent(new Event('storage'));
     } catch (err) {
       console.error('Save product error:', err);
-      // Reveals the exact error (e.g. session expired, field error, etc.)
-      if (err.response?.status === 401) {
-        alert('Kipindi chako kimeisha. Tafadhali ingia tena kwenye akaunti yako.');
-        localStorage.clear();
-        window.location.href = '/login';
-      } else {
-        const errorDetail = err.response?.data ? JSON.stringify(err.response.data) : err.message;
-        alert(`Hitilafu: ${errorDetail}`);
-      }
+      const errorDetail = err.response?.data ? JSON.stringify(err.response.data) : err.message;
+      alert(`Hitilafu: ${errorDetail}`);
     } finally {
       setLoading(false);
     }
   };
 
-  // 3. Quick Stock Adjust (+1 / -1)
+  // 3. Quick Stock Adjust (+1 / -1) & Sync
   const handleAdjustStock = async (product, delta) => {
-    const currentStock = product.stock ?? product.stock_quantity ?? 0;
+    const currentStock = Number(product.stock ?? product.stock_quantity ?? 0);
     const newStock = Math.max(0, currentStock + delta);
 
     setProducts((prev) =>
@@ -90,6 +95,8 @@ export default function ProductsStock() {
         stock: newStock,
         stock_quantity: newStock
       });
+      window.dispatchEvent(new Event('duka_sync'));
+      window.dispatchEvent(new Event('duka_data_updated'));
     } catch (e) {
       fetchProducts();
     }
@@ -121,36 +128,38 @@ export default function ProductsStock() {
     return matchesSearch && matchesCat;
   });
 
+  const liquidGlassCard = "p-4 rounded-[22px] bg-white/[0.03] backdrop-blur-2xl border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.3)]";
+
   return (
-    <div className="max-w-6xl mx-auto space-y-5 select-none font-sans pb-28">
+    <div className="w-full max-w-7xl mx-auto space-y-4 select-none font-sans text-slate-100 pb-36">
       
       {/* Valuation Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <div className="p-4 sm:p-5 rounded-[24px] bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl border border-slate-200/80 dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Thamani ya Stoo</p>
-          <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">TZS {totalStockValue.toLocaleString()}</h3>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className={liquidGlassCard}>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Thamani ya Stoo</p>
+          <h3 className="text-lg sm:text-xl font-black text-white mt-1">TZS {totalStockValue.toLocaleString()}</h3>
         </div>
 
-        <div className="p-4 sm:p-5 rounded-[24px] bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl border border-slate-200/80 dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Jumla ya Bidhaa</p>
-          <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1">{products.length} Aina</h3>
+        <div className={liquidGlassCard}>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Jumla ya Bidhaa</p>
+          <h3 className="text-lg sm:text-xl font-black text-white mt-1">{products.length} Aina</h3>
         </div>
 
-        <div className="p-4 sm:p-5 rounded-[24px] bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl border border-slate-200/80 dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Zinazokaribia Kuisha</p>
-          <h3 className="text-xl sm:text-2xl font-black text-amber-500 mt-1">{lowStockCount} Bidhaa</h3>
+        <div className={liquidGlassCard}>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Zinazokaribia Kuisha</p>
+          <h3 className="text-lg sm:text-xl font-black text-amber-400 mt-1">{lowStockCount} Bidhaa</h3>
         </div>
 
-        <div className="p-4 sm:p-5 rounded-[24px] bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl border border-slate-200/80 dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.02)]">
-          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Zilizokwisha</p>
-          <h3 className="text-xl sm:text-2xl font-black text-rose-500 mt-1">
+        <div className={liquidGlassCard}>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Zilizokwisha</p>
+          <h3 className="text-lg sm:text-xl font-black text-rose-400 mt-1">
             {products.filter(p => Number(p.stock ?? p.stock_quantity ?? 0) === 0).length} Bidhaa
           </h3>
         </div>
       </div>
 
       {/* Action Header */}
-      <div className="bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl p-4 sm:p-5 rounded-[26px] border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div className={`${liquidGlassCard} flex flex-col sm:flex-row items-center justify-between gap-3`}>
         <div className="relative flex-1 w-full">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -158,29 +167,29 @@ export default function ProductsStock() {
             placeholder="Tafuta bidhaa stoo..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-full text-xs sm:text-sm bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full pl-10 pr-4 py-2 rounded-xl text-xs bg-white/[0.06] border border-white/10 text-white outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-          <button onClick={fetchProducts} className="p-2.5 rounded-full bg-slate-100/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition-all cursor-pointer">
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-500' : ''}`} />
+          <button onClick={fetchProducts} className="p-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-slate-300 transition-all cursor-pointer">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-400' : ''}`} />
           </button>
-          <button onClick={() => setIsModalOpen(true)} className="py-2.5 px-5 rounded-full bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer">
+          <button onClick={() => setIsModalOpen(true)} className="py-2.5 px-5 rounded-full bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer">
             <Plus className="w-4 h-4" /> Ongeza Bidhaa Mpya
           </button>
         </div>
       </div>
 
-      {/* Categories */}
+      {/* Categories Filter */}
       {categories.length > 1 && (
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
           {categories.map((cat) => (
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`py-1.5 px-4 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                selectedCategory === cat ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'bg-white/80 dark:bg-slate-900/80 text-slate-600 dark:text-slate-300 border border-slate-200/70 dark:border-slate-800'
+              className={`py-1.5 px-4 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                selectedCategory === cat ? 'bg-blue-600 text-white shadow-sm' : 'bg-white/[0.04] text-slate-300 border border-white/10 hover:bg-white/[0.08]'
               }`}
             >
               {cat}
@@ -190,41 +199,41 @@ export default function ProductsStock() {
       )}
 
       {/* Products Table */}
-      <div className="bg-white/80 dark:bg-[#141a24]/80 backdrop-blur-2xl rounded-[28px] border border-slate-200/80 dark:border-slate-800 shadow-[0_8px_30px_rgba(0,0,0,0.02)] overflow-hidden">
+      <div className={`${liquidGlassCard} overflow-hidden p-0`}>
         {filtered.length === 0 ? (
-          <div className="p-12 text-center space-y-3">
-            <Boxes className="w-10 h-10 text-slate-400 mx-auto" />
-            <h3 className="font-bold text-slate-800 dark:text-white">Hakuna Bidhaa</h3>
-            <p className="text-xs text-slate-500">Bofya "Ongeza Bidhaa Mpya" kusajili bidhaa ya stoo.</p>
+          <div className="p-12 text-center space-y-2">
+            <Boxes className="w-10 h-10 text-slate-500 mx-auto" />
+            <h3 className="font-bold text-white text-sm">Hakuna Bidhaa</h3>
+            <p className="text-xs text-slate-400">Bofya "Ongeza Bidhaa Mpya" kusajili bidhaa ya stoo.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50/80 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 text-slate-400 uppercase tracking-wider font-bold">
+              <thead className="bg-white/[0.04] border-b border-white/10 text-slate-400 uppercase tracking-wider font-bold">
                 <tr>
-                  <th className="py-3.5 px-5">Jina la Bidhaa</th>
-                  <th className="py-3.5 px-4">Kategoria</th>
-                  <th className="py-3.5 px-4">Bei ya Kuuza</th>
-                  <th className="py-3.5 px-4 text-center">Idadi ya Stoo</th>
-                  <th className="py-3.5 px-5 text-right">Rekebisha</th>
+                  <th className="py-3 px-4">Jina la Bidhaa</th>
+                  <th className="py-3 px-4">Kategoria</th>
+                  <th className="py-3 px-4">Bei ya Kuuza</th>
+                  <th className="py-3 px-4 text-center">Idadi ya Stoo</th>
+                  <th className="py-3 px-4 text-right">Rekebisha</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+              <tbody className="divide-y divide-white/5">
                 {filtered.map((item) => {
-                  const price = item.price || item.selling_price || 0;
-                  const stock = item.stock ?? item.stock_quantity ?? 0;
+                  const price = Number(item.price || item.selling_price || 0);
+                  const stock = Number(item.stock ?? item.stock_quantity ?? 0);
                   return (
-                    <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-all">
-                      <td className="py-4 px-5 font-bold text-slate-900 dark:text-white">{item.name}</td>
-                      <td className="py-4 px-4 text-slate-500 dark:text-slate-400">{item.category || 'Duka'}</td>
-                      <td className="py-4 px-4 font-black text-slate-900 dark:text-white">TZS {Number(price).toLocaleString()}</td>
-                      <td className="py-4 px-4 text-center font-black text-sm text-slate-900 dark:text-white">{stock}</td>
-                      <td className="py-4 px-5 text-right">
+                    <tr key={item.id} className="hover:bg-white/[0.02] transition-all">
+                      <td className="py-3.5 px-4 font-bold text-white">{item.name}</td>
+                      <td className="py-3.5 px-4 text-slate-400">{item.category || 'Duka'}</td>
+                      <td className="py-3.5 px-4 font-mono font-black text-emerald-400">TZS {price.toLocaleString()}</td>
+                      <td className="py-3.5 px-4 text-center font-mono font-bold text-white">{stock}</td>
+                      <td className="py-3.5 px-4 text-right">
                         <div className="inline-flex items-center gap-1.5 justify-end">
-                          <button onClick={() => handleAdjustStock(item, -1)} className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 cursor-pointer">
+                          <button onClick={() => handleAdjustStock(item, -1)} className="p-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-slate-300 cursor-pointer">
                             <MinusCircle className="w-4 h-4" />
                           </button>
-                          <button onClick={() => handleAdjustStock(item, 1)} className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 cursor-pointer">
+                          <button onClick={() => handleAdjustStock(item, 1)} className="p-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-slate-300 cursor-pointer">
                             <PlusCircle className="w-4 h-4" />
                           </button>
                         </div>
@@ -240,26 +249,26 @@ export default function ProductsStock() {
 
       {/* Add Product Modal */}
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Weka Bidhaa Mpya Stoo">
-        <form onSubmit={handleSaveProduct} className="space-y-4">
+        <form onSubmit={handleSaveProduct} className="space-y-3.5">
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5 uppercase">Jina la Bidhaa</label>
-            <input required type="text" placeholder="Mf. Unga wa Ngano 2kg" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-[#1a2332] text-slate-900 dark:text-white text-sm outline-none" />
+            <label className="block text-[11px] font-bold text-slate-300 mb-1 uppercase">Jina la Bidhaa</label>
+            <input required type="text" placeholder="Mf. Unga wa Ngano 2kg" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3.5 py-2.5 rounded-xl border border-white/10 bg-white/[0.06] text-white text-xs outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5 uppercase">Kategoria</label>
-            <input type="text" placeholder="Mf. Vyakula, Sabuni" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-[#1a2332] text-slate-900 dark:text-white text-sm outline-none" />
+            <label className="block text-[11px] font-bold text-slate-300 mb-1 uppercase">Kategoria</label>
+            <input type="text" placeholder="Mf. Vyakula, Sabuni" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full px-3.5 py-2.5 rounded-xl border border-white/10 bg-white/[0.06] text-white text-xs outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5 uppercase">Bei ya Kuuza (TZS)</label>
-              <input required type="number" placeholder="3500" value={form.sellingPrice} onChange={(e) => setForm({ ...form, sellingPrice: e.target.value })} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-[#1a2332] text-slate-900 dark:text-white text-sm outline-none" />
+              <label className="block text-[11px] font-bold text-slate-300 mb-1 uppercase">Bei ya Kuuza (TZS)</label>
+              <input required type="number" placeholder="3500" value={form.sellingPrice} onChange={(e) => setForm({ ...form, sellingPrice: e.target.value })} className="w-full px-3.5 py-2.5 rounded-xl border border-white/10 bg-white/[0.06] text-white text-xs outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5 uppercase">Idadi ya Stock</label>
-              <input required type="number" placeholder="50" value={form.stockQuantity} onChange={(e) => setForm({ ...form, stockQuantity: e.target.value })} className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-[#1a2332] text-slate-900 dark:text-white text-sm outline-none" />
+              <label className="block text-[11px] font-bold text-slate-300 mb-1 uppercase">Idadi ya Stock</label>
+              <input required type="number" placeholder="50" value={form.stockQuantity} onChange={(e) => setForm({ ...form, stockQuantity: e.target.value })} className="w-full px-3.5 py-2.5 rounded-xl border border-white/10 bg-white/[0.06] text-white text-xs outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
           </div>
-          <button type="submit" disabled={loading} className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl cursor-pointer shadow-md">
+          <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl cursor-pointer shadow-md transition-all active:scale-95">
             {loading ? 'Inahifadhi...' : 'Hifadhi Bidhaa Kwenye Database ➔'}
           </button>
         </form>
