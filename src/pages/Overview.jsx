@@ -10,7 +10,7 @@ import {
   Users,
   Wallet,
 } from 'lucide-react';
-import { api } from '@/config';
+import { api } from '../../src/config';
 
 const money = (value) => Number(value || 0).toLocaleString();
 
