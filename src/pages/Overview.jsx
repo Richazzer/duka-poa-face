@@ -44,7 +44,6 @@ export default function Overview() {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [error, setError] = useState('');
-  const [categoryData, setCategoryData] = useState([]);
   const [data, setData] = useState({
     analytics: {},
     sales: [],
@@ -158,7 +157,7 @@ export default function Overview() {
 
     return {
       customers: Number(analytics.total_customers ?? 0),
-      sales: Number(analytics.today_sales ?? calculatedSales),
+      sales: calculatedSales,
       salesGrowth: Number(analytics.sales_growth ?? 0),
       customerGrowth: Number(analytics.customer_growth ?? 0),
       netWorth: Number(analytics.net_worth ?? calculatedNetWorth),
@@ -195,34 +194,30 @@ export default function Overview() {
     return days;
   }, [data.sales]);
 
-  const categoriesList = useMemo(() => {
-  if (Array.isArray(data.category_breakdown) && data.category_breakdown.length) {
-    return data.category_breakdown;
-  }
+  const categoryData = useMemo(() => {
+    const products = Array.isArray(data.products) ? data.products : [];
+    if (products.length === 0) return [];
 
-  const products = Array.isArray(data.products) ? data.products : [];
-  if (products.length === 0) return [];
+    const counts = new Map();
 
-  const counts = new Map();
+    products.forEach((product) => {
+      const name =
+        typeof product.category === 'string'
+          ? product.category
+          : product.category?.name || product.category_name || 'Nyingine';
 
-  products.forEach((product) => {
-    const name =
-      typeof product.category === 'string'
-        ? product.category
-        : product.category?.name || product.category_name || 'Nyingine';
+      counts.set(name, (counts.get(name) || 0) + 1);
+    });
 
-    counts.set(name, (counts.get(name) || 0) + 1);
-  });
+    const total = [...counts.values()].reduce((sum, count) => sum + count, 0);
+    const colors = ['#8b7cff', '#55b6ff', '#35d6aa', '#ffbc66', '#f28bb8'];
 
-  const total = [...counts.values()].reduce((sum, count) => sum + count, 0);
-  const colors = ['#8b7cff', '#55b6ff', '#35d6aa', '#ffbc66', '#f28bb8'];
-
-  return [...counts.entries()].map(([name, count], index) => ({
-    name,
-    percent: Math.round((count / total) * 100),
-    color: colors[index % colors.length],
-  }));
-}, [data.category_breakdown, data.products]);
+    return [...counts.entries()].map(([name, count], index) => ({
+      name,
+      value: total > 0 ? Math.round((count / total) * 100) : 0,
+      color: colors[index % colors.length],
+    }));
+  }, [data.products]);
 
   const chartWidth = 720;
   const chartHeight = 250;
@@ -312,7 +307,6 @@ export default function Overview() {
 
   return (
     <main className="relative isolate space-y-5 overflow-hidden px-3 pb-28 font-sans text-slate-900 dark:text-slate-100 sm:px-5">
-      {/* Soft smoky color behind the dashboard */}
       <div className="pointer-events-none absolute -left-28 top-8 -z-10 h-72 w-72 rounded-full bg-violet-400/15 blur-[100px] dark:bg-violet-500/15" />
       <div className="pointer-events-none absolute -right-28 top-72 -z-10 h-80 w-80 rounded-full bg-cyan-300/15 blur-[110px] dark:bg-blue-500/10" />
 
