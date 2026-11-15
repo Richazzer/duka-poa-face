@@ -44,7 +44,7 @@ export default function Overview() {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [error, setError] = useState('');
-
+  const [categoryData, setCategoryData] = useState([]);
   const [data, setData] = useState({
     analytics: {},
     sales: [],
