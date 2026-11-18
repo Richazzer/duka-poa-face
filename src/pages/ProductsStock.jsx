@@ -5,27 +5,47 @@ import {
   RefreshCw, 
   Boxes, 
   PlusCircle, 
-  MinusCircle 
+  MinusCircle,
+  Lock,
+  X,
+  CheckCircle2
 } from 'lucide-react';
 import Modal from '../components/common/Modal';
 import { api } from '../config';
 
 export default function ProductsStock() {
-  const [products, setProducts] = useState([]);
+  // 💥 ZERO-LATENCY INSTANT LOAD: Reads cached products on millisecond 0! 💥
+  const [products, setProducts] = useState(() => {
+    try {
+      const cached = localStorage.getItem('duka_cached_products');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Zote');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ name: '', category: '', sellingPrice: '', stockQuantity: '' });
 
-  // 1. Fetch Products & Listen to Real-Time Sync
-  const fetchProducts = async () => {
-    setLoading(true);
+  // PIN Authorization State
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [enteredPin, setEnteredPin] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [pendingAction, setPendingAction] = useState(null); // Stores action to execute after PIN
+
+  // 1. Silent Background Revalidation (No blank screens or latency)
+  const fetchProducts = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     try {
       const res = await api.get('/products/');
-      setProducts(Array.isArray(res.data) ? res.data : (res.data.results || []));
+      const list = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+      setProducts(list);
+      localStorage.setItem('duka_cached_products', JSON.stringify(list));
     } catch (e) {
-      console.warn('Stock fetch error:', e);
+      console.warn('Stock fetch note:', e);
     } finally {
       setLoading(false);
     }
@@ -36,18 +56,44 @@ export default function ProductsStock() {
     const handleSync = () => fetchProducts();
     window.addEventListener('duka_sync', handleSync);
     window.addEventListener('duka_data_updated', handleSync);
-    window.addEventListener('storage', handleSync);
 
     return () => {
       window.removeEventListener('duka_sync', handleSync);
       window.removeEventListener('duka_data_updated', handleSync);
-      window.removeEventListener('storage', handleSync);
     };
   }, []);
 
-  // 2. Save Product & Broadcast Sync
-  const handleSaveProduct = async (e) => {
+  // Check Owner PIN before sensitive actions
+  const requirePin = (actionCallback) => {
+    const ownerPin = localStorage.getItem('duka_owner_pin');
+    // If owner set a PIN in Settings, enforce it
+    if (ownerPin && ownerPin.trim().length > 0) {
+      setPendingAction(() => actionCallback);
+      setEnteredPin('');
+      setPinError('');
+      setIsPinModalOpen(true);
+    } else {
+      // No PIN set in Settings: execute directly
+      actionCallback();
+    }
+  };
+
+  const handleVerifyPin = (e) => {
     e.preventDefault();
+    const ownerPin = localStorage.getItem('duka_owner_pin') || '';
+    if (enteredPin.trim() === ownerPin.trim()) {
+      setIsPinModalOpen(false);
+      if (pendingAction) {
+        pendingAction();
+        setPendingAction(null);
+      }
+    } else {
+      setPinError('PIN ya mmiliki siyo sahihi! Tafadhali jaribu tena.');
+    }
+  };
+
+  // 2. Save Product (Guarded by PIN & Instant Sync)
+  const executeSaveProduct = async () => {
     setLoading(true);
 
     const priceNum = Number(form.sellingPrice) || 0;
@@ -64,14 +110,17 @@ export default function ProductsStock() {
 
     try {
       const res = await api.post('/products/', payload);
-      setProducts((prev) => [res.data, ...prev]);
+      const updatedList = [res.data, ...products];
+      setProducts(updatedList);
+      localStorage.setItem('duka_cached_products', JSON.stringify(updatedList));
+
       setIsModalOpen(false);
       setForm({ name: '', category: '', sellingPrice: '', stockQuantity: '' });
 
-      // Broadcast real-time updates to POS and Overview
+      // Broadcast real-time sync across POS and Overview
+      localStorage.removeItem('duka_cached_overview');
       window.dispatchEvent(new Event('duka_sync'));
       window.dispatchEvent(new Event('duka_data_updated'));
-      window.dispatchEvent(new Event('storage'));
     } catch (err) {
       console.error('Save product error:', err);
       const errorDetail = err.response?.data ? JSON.stringify(err.response.data) : err.message;
@@ -81,25 +130,37 @@ export default function ProductsStock() {
     }
   };
 
-  // 3. Quick Stock Adjust (+1 / -1) & Sync
-  const handleAdjustStock = async (product, delta) => {
+  const handleSaveProduct = (e) => {
+    e.preventDefault();
+    requirePin(() => executeSaveProduct());
+  };
+
+  // 3. Stock Adjust (+1 / -1 guarded by PIN)
+  const executeAdjustStock = async (product, delta) => {
     const currentStock = Number(product.stock ?? product.stock_quantity ?? 0);
     const newStock = Math.max(0, currentStock + delta);
 
-    setProducts((prev) =>
-      prev.map((p) => (p.id === product.id ? { ...p, stock: newStock, stock_quantity: newStock } : p))
+    const updated = products.map((p) =>
+      p.id === product.id ? { ...p, stock: newStock, stock_quantity: newStock } : p
     );
+    setProducts(updated);
+    localStorage.setItem('duka_cached_products', JSON.stringify(updated));
 
     try {
       await api.patch(`/products/${product.id}/`, {
         stock: newStock,
         stock_quantity: newStock
       });
+      localStorage.removeItem('duka_cached_overview');
       window.dispatchEvent(new Event('duka_sync'));
       window.dispatchEvent(new Event('duka_data_updated'));
     } catch (e) {
       fetchProducts();
     }
+  };
+
+  const handleAdjustStock = (product, delta) => {
+    requirePin(() => executeAdjustStock(product, delta));
   };
 
   const totalStockValue = useMemo(() => {
@@ -172,7 +233,7 @@ export default function ProductsStock() {
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-          <button onClick={fetchProducts} className="p-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-slate-300 transition-all cursor-pointer">
+          <button onClick={() => fetchProducts(true)} className="p-2.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-slate-300 transition-all cursor-pointer">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-400' : ''}`} />
           </button>
           <button onClick={() => setIsModalOpen(true)} className="py-2.5 px-5 rounded-full bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer">
@@ -273,6 +334,63 @@ export default function ProductsStock() {
           </button>
         </form>
       </Modal>
+
+      {/* 
+        ========================================================================
+        💥 OWNER MASTER PIN PROMPT MODAL 💥
+        ========================================================================
+      */}
+      {isPinModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-fadeIn">
+          <div className="w-full max-w-xs p-6 rounded-[30px] bg-[#131926] border border-white/15 shadow-2xl text-center space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+              <Lock className="w-6 h-6" />
+            </div>
+
+            <div>
+              <h3 className="text-base font-black text-white">Weka PIN ya Mmiliki</h3>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Hatua hii inahitaji uthibitisho wa PIN ya siri iliyowekwa kwenye Mipangilio.
+              </p>
+            </div>
+
+            {pinError && (
+              <p className="text-xs text-rose-400 font-bold bg-rose-950/40 border border-rose-800/60 p-2 rounded-xl">
+                {pinError}
+              </p>
+            )}
+
+            <form onSubmit={handleVerifyPin} className="space-y-4">
+              <input
+                type="password"
+                maxLength="4"
+                autoFocus
+                required
+                placeholder="••••"
+                value={enteredPin}
+                onChange={(e) => setEnteredPin(e.target.value)}
+                className="w-32 mx-auto py-2.5 text-center text-lg font-mono tracking-[0.4em] bg-white/[0.06] border border-white/20 rounded-xl text-white outline-none focus:ring-2 focus:ring-blue-500"
+              />
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPinModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-full bg-white/[0.08] hover:bg-white/[0.12] text-xs font-bold text-slate-300"
+                >
+                  Ghairi
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-full bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white shadow-md shadow-blue-600/30"
+                >
+                  Thibitisha ➔
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );
