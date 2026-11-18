@@ -10,10 +10,12 @@ import {
   TrendingUp,
   Users,
   Wallet,
-  Crown,
-  Bell,
-  X,
-  CheckCircle2
+  Calendar,
+  Sun,
+  Sunrise,
+  Sunset,
+  Moon,
+  Gift
 } from 'lucide-react';
 import { api } from '../config';
 
@@ -36,31 +38,80 @@ const formatDate = (date, options = { month: 'short', day: 'numeric' }) =>
   date.toLocaleDateString(undefined, options);
 
 const cardClass =
-  'relative overflow-hidden rounded-[28px] border border-white/70 bg-white/60 shadow-[0_18px_60px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/[0.09] dark:bg-[#131926]/90 dark:shadow-[0_18px_60px_rgba(0,0,0,0.3)] transition-all duration-300 hover:border-indigo-500/30';
+  'relative overflow-hidden rounded-[28px] border border-white/70 bg-white/60 shadow-[0_18px_60px_rgba(15,23,42,0.06)] backdrop-blur-2xl dark:border-white/[0.09] dark:bg-[#131926]/90 dark:shadow-[0_18px_60px_rgba(0,0,0,0.3)] transition-all duration-300 hover:border-indigo-500/30';
 
 const panelClass =
   'rounded-2xl border border-white/65 bg-white/45 backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.035]';
+
+// =====================================================================
+// DYNAMIC SMART GREETING & TANZANIAN HOLIDAY ENGINE
+// =====================================================================
+const getSmartGreeting = () => {
+  const now = new Date();
+  const hour = now.getHours();
+  const month = now.getMonth() + 1; // 1-12
+  const day = now.getDate();
+  const dayOfWeek = now.getDay(); // 0 = Sun, 5 = Fri, 6 = Sat
+
+  // Read saved user/business name
+  let userName = '';
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    userName = user?.name || user?.username || (user?.email ? user.email.split('@')[0] : '');
+  } catch {}
+  const storeName = localStorage.getItem('duka_store_name') || '';
+  const displayName = storeName || (userName ? userName.charAt(0).toUpperCase() + userName.slice(1) : 'Mfanyabiashara');
+
+  // 1. Check Tanzanian National Holidays & Special Events
+  if (month === 10 && day === 14) return { text: `Heri ya Siku ya Nyerere, ${displayName}!`, sub: 'Kumbukumbu ya Baba wa Taifa. Biashara yako inaendeleaje leo?', icon: Gift };
+  if (month === 4 && day === 26) return { text: `Heri ya Siku ya Muungano, ${displayName}!`, sub: 'Mshikamano na mafanikio kwa biashara yako leo.', icon: Gift };
+  if (month === 1 && day === 12) return { text: `Heri ya Siku ya Mapinduzi, ${displayName}!`, sub: 'Mapumziko mema na mauzo mema dukani kwako.', icon: Gift };
+  if (month === 5 && day === 1) return { text: `Heri ya Mei Mosi (Wafanyakazi), ${displayName}!`, sub: 'Pongezi kwa juhudi zako za kukuza biashara.', icon: Gift };
+  if (month === 7 && day === 7) return { text: `Heri ya Sikukuu ya Saba Saba, ${displayName}!`, sub: 'Siku ya Biashara Tanzania! Mauzo yako yaendelee kupanda.', icon: Gift };
+  if (month === 8 && day === 8) return { text: `Heri ya Sikukuu ya Nane Nane, ${displayName}!`, sub: 'Mafanikio kwa wakulima na wafanyabiashara wote.', icon: Gift };
+  if (month === 12 && day === 9) return { text: `Heri ya Siku ya Uhuru, ${displayName}!`, sub: 'Uhuru na maendeleo kwa duka lako.', icon: Gift };
+  if (month === 1 && day === 1) return { text: `Heri ya Mwaka Mpya, ${displayName}!`, sub: 'Mwaka wa baraka, ukuaji wa mtaji na faida kubwa.', icon: Gift };
+  if (month === 12 && day === 25) return { text: `Heri ya Sikukuu ya Krismasi, ${displayName}!`, sub: 'Amani, furaha na msimu mzuri wa mauzo.', icon: Gift };
+
+  // 2. Weekend Greetings
+  if (dayOfWeek === 5 && hour >= 14) return { text: `Weekend Njema, ${displayName}!`, sub: 'Ijumaa tulivu. Wikiendi hii uongeze mauzo maradufu.', icon: Sparkles };
+  if (dayOfWeek === 6) return { text: `Jumamosi Njema, ${displayName}!`, sub: 'Unajisikiaje leo? Wateja wa weekend waanze kufika mapema.', icon: Sparkles };
+  if (dayOfWeek === 0) return { text: `Jumapili Njema, ${displayName}!`, sub: 'Mapumziko mema na hesabu safi za kufunga wiki.', icon: Sparkles };
+
+  // 3. Time of Day Greetings
+  if (hour >= 5 && hour < 12) {
+    return { text: `Habari za Asubuhi, ${displayName}!`, sub: 'Unajisikiaje leo? Duka limefunguliwa tayari kwa mauzo mazuri.', icon: Sunrise };
+  } else if (hour >= 12 && hour < 16) {
+    return { text: `Habari za Mchana, ${displayName}!`, sub: 'Mzunguko wa biashara unaendeleaje mchana huu?', icon: Sun };
+  } else if (hour >= 16 && hour < 20) {
+    return { text: `Habari za Jioni, ${displayName}!`, sub: 'Masaa ya jioni ndio muda mzuri wa wateja wa nyumbani kupita.', icon: Sunset };
+  } else {
+    return { text: `Habari za Usiku, ${displayName}!`, sub: 'Muda wa kupumzika na kukagua mahesabu ya siku.', icon: Moon };
+  }
+};
 
 export default function Overview() {
   const navigate = useNavigate();
   const [timeframe, setTimeframe] = useState('monthly');
   const [hoveredPoint, setHoveredPoint] = useState(null);
   const [hoveredBar, setHoveredBar] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [error, setError] = useState('');
 
-  // Floating Modals
-  const [isPlanOpen, setIsPlanOpen] = useState(false);
-  const [isNotifOpen, setIsNotifOpen] = useState(false);
-
-  // Live Database State (Strictly Real Data, Zero Fake Fallbacks!)
-  const [data, setData] = useState({
-    analytics: {},
-    sales: [],
-    products: [],
+  // 💥 0.0-SECOND INSTANT LOADING (Loads cached snapshot immediately on mount!) 💥
+  const [data, setData] = useState(() => {
+    try {
+      const cached = localStorage.getItem('duka_overview_cache');
+      return cached ? JSON.parse(cached) : { analytics: {}, sales: [], products: [] };
+    } catch {
+      return { analytics: {}, sales: [], products: [] };
+    }
   });
 
+  const greeting = useMemo(() => getSmartGreeting(), []);
+  const GreetingIcon = greeting.icon;
+
+  // Real-time backend fetch (Silent background revalidation without blocking screen)
   const fetchDashboardData = useCallback(async () => {
     try {
       setError('');
@@ -86,17 +137,17 @@ export default function Overview() {
           ? getList(productsResult.value?.data)
           : [];
 
-      setData({ analytics, sales, products });
+      const freshData = { analytics, sales, products };
+      setData(freshData);
       setLastUpdated(new Date());
+
+      // Save to instant local cache for next zero-delay visit
+      localStorage.setItem('duka_overview_cache', JSON.stringify(freshData));
     } catch (fetchError) {
-      console.error('Dashboard data fetch failed:', fetchError);
-      setError('Taarifa zimechelewa kupakia. Bofya "Sasisha" kujaribu tena.');
-    } finally {
-      setLoading(false);
+      console.warn('Dashboard background sync note:', fetchError);
     }
   }, [timeframe]);
 
-  // 💥 REAL-TIME INTER-TAB COMMUNICATION 💥
   useEffect(() => {
     fetchDashboardData();
 
@@ -117,7 +168,7 @@ export default function Overview() {
     };
   }, [fetchDashboardData]);
 
-  // Real Sales Filtered by Timeframe
+  // Real Sales Calculations
   const salesForPeriod = useMemo(() => {
     const now = new Date();
     const start = new Date(now);
@@ -200,13 +251,12 @@ export default function Overview() {
     return days;
   }, [data.sales]);
 
-  // Real Category Data from Database Products
+  // Real Category Data from Store Products
   const categoryData = useMemo(() => {
     const products = Array.isArray(data.products) ? data.products : [];
     if (products.length === 0) return [];
 
     const counts = new Map();
-
     products.forEach((product) => {
       const name =
         typeof product.category === 'string'
@@ -303,45 +353,42 @@ export default function Overview() {
 
   return (
     <main className="relative isolate space-y-5 overflow-hidden px-3 pb-36 font-sans text-slate-900 dark:text-slate-100 sm:px-5 select-none transition-colors duration-300">
-      <div className="pointer-events-none absolute -left-28 top-8 -z-10 h-72 w-72 rounded-full bg-violet-400/15 blur-[100px] dark:bg-violet-500/15" />
-      <div className="pointer-events-none absolute -right-28 top-72 -z-10 h-80 w-80 rounded-full bg-cyan-300/15 blur-[110px] dark:bg-blue-500/10" />
-
+      
       {/* 
         ========================================================================
-        TOP BAR: FLOATING LIQUID GLASS BUTTONS: PLAN (LEFT) & NOTIFICATION (RIGHT)
+        DYNAMIC TIME-OF-DAY & TANZANIAN HOLIDAY GREETING HEADER
         ========================================================================
       */}
-      <div className="flex items-center justify-between pt-1 px-1">
-        
-        {/* Left Floating Liquid Glass Circle: KIFURUSHI / PLAN */}
-        <button
-          onClick={() => setIsPlanOpen(true)}
-          className="w-11 h-11 rounded-full bg-white/70 dark:bg-[#131926]/85 backdrop-blur-3xl border border-white/80 dark:border-white/15 flex items-center justify-center text-amber-500 hover:scale-105 active:scale-95 transition-all shadow-[0_10px_25px_rgba(0,0,0,0.06)] dark:shadow-[0_10px_25px_rgba(0,0,0,0.3)] cursor-pointer group"
-          title="Kifurushi cha Duka (Plan)"
-        >
-          <Crown className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-        </button>
+      <header className={`${cardClass} p-5 sm:p-7`}>
+        <div className="pointer-events-none absolute -right-10 -top-24 h-64 w-64 rounded-full bg-blue-500/10 blur-[80px]" />
 
-        {/* Center Title */}
-        <div className="text-center">
-          <span className="text-lg font-black tracking-tight text-slate-900 dark:text-white block">
-            Dashboard
-          </span>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-            Duka Poa POS
-          </span>
+        <div className="relative flex flex-wrap items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-2 rounded-full border border-blue-200/70 bg-blue-50/75 px-3 py-1 text-[11px] font-bold text-blue-700 dark:border-blue-300/15 dark:bg-blue-400/10 dark:text-blue-200 mb-1">
+              <GreetingIcon className="h-3.5 w-3.5" />
+              {greeting.text}
+            </div>
+
+            <h1 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white sm:text-3xl">
+              {greeting.text}
+            </h1>
+
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+              {greeting.sub}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={fetchDashboardData}
+            className="inline-flex h-11 items-center gap-2 rounded-2xl border border-white/70 bg-white/65 px-4 text-xs font-bold text-slate-700 shadow-sm backdrop-blur-xl transition hover:bg-white active:scale-95 dark:border-white/10 dark:bg-white/[0.06] dark:text-slate-200 cursor-pointer"
+            title="Sasisha Takwimu za Hivi Punde"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Sasisha
+          </button>
         </div>
-
-        {/* Right Floating Liquid Glass Circle: TAARIFA / NOTIFICATIONS */}
-        <button
-          onClick={() => setIsNotifOpen(true)}
-          className="relative w-11 h-11 rounded-full bg-white/70 dark:bg-[#131926]/85 backdrop-blur-3xl border border-white/80 dark:border-white/15 flex items-center justify-center text-slate-700 dark:text-slate-300 hover:text-blue-500 hover:scale-105 active:scale-95 transition-all shadow-[0_10px_25px_rgba(0,0,0,0.06)] dark:shadow-[0_10px_25px_rgba(0,0,0,0.3)] cursor-pointer"
-          title="Taarifa za Duka"
-        >
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-blue-500 ring-2 ring-white dark:ring-[#131926] animate-pulse"></span>
-        </button>
-      </div>
+      </header>
 
       {error && (
         <div
@@ -354,7 +401,7 @@ export default function Overview() {
 
       {/* 
         ========================================================================
-        1. TOP METRIC CARDS (Exact match to reference photo)
+        1. TOP METRIC CARDS (Instant Real Numbers)
         ========================================================================
       */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -366,8 +413,6 @@ export default function Overview() {
               key={metric.label}
               className={`${cardClass} group p-5 transition duration-300 hover:-translate-y-1`}
             >
-              <div className="pointer-events-none absolute -right-10 -top-16 h-40 w-40 rounded-full bg-white/60 blur-3xl dark:bg-white/[0.04]" />
-
               <div className="relative flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
@@ -405,19 +450,17 @@ export default function Overview() {
 
       {/* 
         ========================================================================
-        2. SALES OVERVIEW GRAPH (Purple Glowing Wave Curve from Reference Photo)
+        2. SALES OVERVIEW GRAPH (Wave Curve with Glowing Points)
         ========================================================================
       */}
       <section className={`${cardClass} p-4 sm:p-6`}>
-        <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-violet-400/10 blur-[90px] dark:bg-violet-400/10" />
-
         <div className="relative flex flex-col justify-between gap-4 border-b border-slate-200/70 pb-4 dark:border-white/10 sm:flex-row sm:items-center">
           <div>
             <h2 className="text-lg font-black text-slate-950 dark:text-white sm:text-xl">
               Sales Overview
             </h2>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Mauzo halisi ya siku 7 zilizopita
+              Mwelekeo halisi wa mauzo ya siku 7 zilizopita
               {lastUpdated && (
                 <span className="ml-2 font-mono">
                   · Imesasishwa {lastUpdated.toLocaleTimeString([], {
@@ -459,28 +502,15 @@ export default function Overview() {
             viewBox={`0 0 ${chartWidth} ${chartHeight}`}
             preserveAspectRatio="xMidYMid meet"
             className="block h-auto max-h-[300px] w-full overflow-visible"
-            role="img"
           >
             <defs>
-              <linearGradient
-                id="salesSmokeFill"
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
+              <linearGradient id="salesSmokeFill" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#8b7cff" stopOpacity="0.4" />
                 <stop offset="55%" stopColor="#5aaeff" stopOpacity="0.13" />
                 <stop offset="100%" stopColor="#5aaeff" stopOpacity="0" />
               </linearGradient>
 
-              <filter
-                id="salesLineGlow"
-                x="-30%"
-                y="-30%"
-                width="160%"
-                height="160%"
-              >
+              <filter id="salesLineGlow" x="-30%" y="-30%" width="160%" height="160%">
                 <feGaussianBlur stdDeviation="5" result="blur" />
                 <feMerge>
                   <feMergeNode in="blur" />
@@ -490,13 +520,7 @@ export default function Overview() {
             </defs>
 
             {[0.25, 0.5, 0.75].map((ratio) => {
-              const y =
-                chartPadding.top +
-                ratio *
-                  (chartHeight -
-                    chartPadding.top -
-                    chartPadding.bottom);
-
+              const y = chartPadding.top + ratio * (chartHeight - chartPadding.top - chartPadding.bottom);
               return (
                 <line
                   key={ratio}
@@ -512,7 +536,6 @@ export default function Overview() {
             })}
 
             <path d={areaPath} fill="url(#salesSmokeFill)" />
-
             <path
               d={curvePath}
               fill="none"
@@ -535,22 +558,10 @@ export default function Overview() {
                   onTouchStart={() => setHoveredPoint(index)}
                   className="cursor-pointer outline-none"
                 >
-                  <rect
-                    x={point.x - 35}
-                    y={0}
-                    width="70"
-                    height={chartHeight}
-                    fill="transparent"
-                  />
+                  <rect x={point.x - 35} y={0} width={70} height={chartHeight} fill="transparent" />
 
                   {selected && (
-                    <circle
-                      cx={point.x}
-                      cy={point.y}
-                      r="11"
-                      fill="#8b7cff"
-                      opacity="0.18"
-                    />
+                    <circle cx={point.x} cy={point.y} r="11" fill="#8b7cff" opacity="0.18" />
                   )}
 
                   <circle
@@ -579,12 +590,10 @@ export default function Overview() {
 
       {/* 
         ========================================================================
-        3. SPLIT SECTION: TOP CATEGORIES DONUT (LEFT) & USERS BAR CHART (RIGHT)
+        3. TOP CATEGORIES (LEFT) & USERS WEEKLY BAR CHART (RIGHT)
         ========================================================================
       */}
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-5">
-        
-        {/* Left: Top Categories Donut Chart */}
         <article className={`${cardClass} p-5 sm:p-6 xl:col-span-3`}>
           <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 pb-4 dark:border-white/10">
             <div>
@@ -680,7 +689,6 @@ export default function Overview() {
           )}
         </article>
 
-        {/* Right: Weekly Activity Bars */}
         <article className={`${cardClass} p-5 sm:p-6 xl:col-span-2`}>
           <div className="flex items-center justify-between gap-3 border-b border-slate-200/70 pb-4 dark:border-white/10">
             <div>
@@ -763,7 +771,7 @@ export default function Overview() {
               Fuatilia mwenendo wa mauzo
             </p>
             <p className="mt-2 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-              Linganisha mauzo ya kipindi hiki na kilichopita kutambua mwelekeo.
+              Linganisha mauzo ya kipindi hiki na kilichopita kutambua mabadiliko.
             </p>
           </div>
 
@@ -788,100 +796,6 @@ export default function Overview() {
           </div>
         </div>
       </section>
-
-      {/* 
-        ========================================================================
-        MODAL 1: PLAN / KIFURUSHI (Left Floating Circle)
-        ========================================================================
-      */}
-      {isPlanOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-fadeIn">
-          <div className="w-full max-w-sm p-6 sm:p-7 rounded-[32px] bg-white dark:bg-[#131926] border border-slate-200 dark:border-white/15 shadow-2xl text-center space-y-4">
-            <div className="w-14 h-14 rounded-2xl bg-amber-500/20 text-amber-500 flex items-center justify-center mx-auto shadow-inner">
-              <Crown className="w-7 h-7" />
-            </div>
-
-            <div>
-              <h3 className="text-xl font-black text-slate-900 dark:text-white">Mpango wa Duka Poa</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Kifurushi Chako: <strong className="text-emerald-600 dark:text-emerald-400">Pro Retailer (Bure)</strong>
-              </p>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-[#192233] text-left text-xs space-y-2.5 border border-slate-200 dark:border-slate-800">
-              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> Mauzo na Risiti zisizo na kikomo
-              </div>
-              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> Usimamizi wa Stoo & Tahadhari
-              </div>
-              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" /> Daftari la Madeni & WhatsApp
-              </div>
-            </div>
-
-            <button
-              onClick={() => setIsPlanOpen(false)}
-              className="w-full py-3.5 rounded-full bg-slate-900 text-white dark:bg-white dark:text-slate-900 font-bold text-xs cursor-pointer shadow-sm active:scale-95 transition-all"
-            >
-              Funga
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* 
-        ========================================================================
-        MODAL 2: NOTIFICATIONS (Right Floating Circle)
-        ========================================================================
-      */}
-      {isNotifOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-fadeIn">
-          <div className="w-full max-w-sm p-6 rounded-[32px] bg-white dark:bg-[#131926] border border-slate-200 dark:border-white/15 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <Bell className="w-4 h-4 text-blue-500" />
-                <h3 className="text-sm font-black text-slate-900 dark:text-white">Taarifa za Duka</h3>
-              </div>
-              <button onClick={() => setIsNotifOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-2.5 max-h-80 overflow-y-auto">
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#192233] text-xs space-y-1 border border-slate-200 dark:border-slate-800">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-900 dark:text-white">Tahadhari ya Stoo</span>
-                  <span className="text-[10px] text-slate-400">Sasa</span>
-                </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  {data.products.filter(p => Number(p.stock ?? 0) <= 5).length > 0 
-                    ? `Kuna bidhaa ${data.products.filter(p => Number(p.stock ?? 0) <= 5).length} zilizobaki chini ya kiwango stoo.`
-                    : 'Stoo yako iko salama, bidhaa zote zina kiwango cha kutosha.'}
-                </p>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#192233] text-xs space-y-1 border border-slate-200 dark:border-slate-800">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-900 dark:text-white">Mauzo Yaliyorekodiwa</span>
-                  <span className="text-[10px] text-slate-400">Leo</span>
-                </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Umerekodi mauzo yenye jumla ya TZS {metricValues.sales.toLocaleString()}.
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setIsNotifOpen(false)}
-              className="w-full py-3 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-white font-bold text-xs cursor-pointer active:scale-95 transition-all"
-            >
-              Funga
-            </button>
-          </div>
-        </div>
-      )}
-
     </main>
   );
 }
