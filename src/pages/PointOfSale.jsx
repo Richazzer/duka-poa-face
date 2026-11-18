@@ -12,66 +12,106 @@ import {
   PlayCircle,
   Printer,
   Share2,
-  Clock,
-  Receipt,
-  FileText
+  Lock
 } from 'lucide-react';
 import Modal from '../components/common/Modal';
 import { api } from '../config';
 
 export default function PointOfSale() {
-  const [products, setProducts] = useState([]);
+  // 💥 ZERO-LATENCY INSTANT LOAD: Reads cached products on millisecond 0! 💥
+  const [products, setProducts] = useState(() => {
+    try {
+      const cached = localStorage.getItem('duka_cached_products');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+
   const [cart, setCart] = useState([]);
   const [search, setSearch] = useState('');
   const [selectedCat, setSelectedCat] = useState('Zote');
   const [loading, setLoading] = useState(false);
 
-  // Held Carts
   const [heldCarts, setHeldCarts] = useState([]);
-
-  // Modals
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [completedSale, setCompletedSale] = useState(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [pastSales, setPastSales] = useState([]);
   const [viewingPastReceipt, setViewingPastReceipt] = useState(null);
 
-  // Checkout Form States
-  const [paymentMethod, setPaymentMethod] = useState('Cash'); // Cash, M-Pesa, Airtel Money, Mixx by Yas, Deni
+  // Form states
+  const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [cashTendered, setCashTendered] = useState('');
   const [discountAmount, setDiscountAmount] = useState('');
 
-  // 1. Fetch Real Products from Database
+  // PIN Gate State
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [enteredPin, setEnteredPin] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [pendingAction, setPendingAction] = useState(null);
+
+  // 1. Silent Background Revalidation (Zero Latency)
   const fetchProducts = async () => {
-    setLoading(true);
     try {
       const res = await api.get('/products/');
-      setProducts(res.data || []);
+      const list = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+      setProducts(list);
+      localStorage.setItem('duka_cached_products', JSON.stringify(list));
     } catch (e) {
-      console.warn('Could not fetch products:', e);
-    } finally {
-      setLoading(false);
+      console.warn('POS fetch error:', e);
     }
   };
 
-  // 2. Fetch Past Receipts History
   const fetchPastSales = async () => {
     try {
       const res = await api.get('/sales/');
-      setPastSales(res.data || []);
-    } catch (e) {
-      console.warn('Could not fetch sales history:', e);
-    }
+      setPastSales(Array.isArray(res.data) ? res.data : (res.data?.results || []));
+    } catch (e) {}
   };
 
   useEffect(() => {
     fetchProducts();
     fetchPastSales();
+    const handleSync = () => { fetchProducts(); fetchPastSales(); };
+    window.addEventListener('duka_sync', handleSync);
+    window.addEventListener('duka_data_updated', handleSync);
+    return () => {
+      window.removeEventListener('duka_sync', handleSync);
+      window.removeEventListener('duka_data_updated', handleSync);
+    };
   }, []);
 
-  // 3. Cart Management
+  // PIN Gate Helper
+  const requirePin = (actionCallback) => {
+    const ownerPin = localStorage.getItem('duka_owner_pin');
+    if (ownerPin && ownerPin.trim().length > 0) {
+      setPendingAction(() => actionCallback);
+      setEnteredPin('');
+      setPinError('');
+      setIsPinModalOpen(true);
+    } else {
+      actionCallback();
+    }
+  };
+
+  const handleVerifyPin = (e) => {
+    e.preventDefault();
+    const ownerPin = localStorage.getItem('duka_owner_pin') || '';
+    if (enteredPin.trim() === ownerPin.trim()) {
+      setIsPinModalOpen(false);
+      if (pendingAction) {
+        pendingAction();
+        setPendingAction(null);
+      }
+    } else {
+      setPinError('PIN ya mmiliki siyo sahihi! Tafadhali jaribu tena.');
+    }
+  };
+
+  // Cart Management
   const addToCart = (product) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
@@ -98,7 +138,6 @@ export default function PointOfSale() {
     );
   };
 
-  // Calculations
   const subtotal = useMemo(() => {
     return cart.reduce((sum, item) => {
       const price = Number(item.price || item.selling_price || 0);
@@ -109,14 +148,12 @@ export default function PointOfSale() {
   const discount = Number(discountAmount) || 0;
   const grandTotal = Math.max(0, subtotal - discount);
 
-  // Cash Change (Chenji) Calculator
   const changeDue = useMemo(() => {
     const given = Number(cashTendered) || 0;
     if (given <= 0 || given < grandTotal) return 0;
     return given - grandTotal;
   }, [cashTendered, grandTotal]);
 
-  // Hold Cart Feature
   const handleHoldCart = () => {
     if (cart.length === 0) return;
     setHeldCarts((prev) => [
@@ -138,10 +175,8 @@ export default function PointOfSale() {
     setHeldCarts((prev) => prev.filter((h) => h.id !== heldId));
   };
 
-  // =========================================================================
-  // 4. THE COMPLETE SALE FUNCTION (WIRED DIRECTLY & EMITS LIVE SYNC)
-  // =========================================================================
-  const handleCompleteSale = async () => {
+  // 2. Complete Sale (Guarded by PIN & Real-Time Sync)
+  const executeCompleteSale = async () => {
     if (cart.length === 0) return;
     setLoading(true);
 
@@ -160,7 +195,6 @@ export default function PointOfSale() {
     try {
       const res = await api.post('/sales/', salePayload);
 
-      // If customer bought on credit (Deni), record in debt ledger
       if (paymentMethod === 'Deni') {
         try {
           await api.post('/debts/', {
@@ -194,19 +228,28 @@ export default function PointOfSale() {
       fetchProducts();
       fetchPastSales();
 
-      // 💥 INSTANT LIVE SYNC TO OVERVIEW TAB 💥
+      // Broadcast real-time live sync across Overview and Stock
       localStorage.removeItem('duka_cached_overview');
-      window.dispatchEvent(new CustomEvent('duka_sync'));
+      window.dispatchEvent(new Event('duka_sync'));
+      window.dispatchEvent(new Event('duka_data_updated'));
 
     } catch (err) {
-      console.error('Sale failed:', err);
+      console.error('Sale error:', err);
       alert('Imeshindikana kurekodi mauzo. Hakikisha mtandao uko sawa.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Share via WhatsApp
+  const handleCompleteSale = () => {
+    // If giving a discount or customer credit, enforce Owner PIN check
+    if (discount > 0 || paymentMethod === 'Deni') {
+      requirePin(() => executeCompleteSale());
+    } else {
+      executeCompleteSale();
+    }
+  };
+
   const handleShareWhatsApp = (sale) => {
     if (!sale) return;
     let cleanPhone = (customerPhone || sale.phone || '').replace(/\D/g, '');
@@ -215,11 +258,10 @@ export default function PointOfSale() {
     const msg = encodeURIComponent(
       `🧾 *RISITI YA DUKA POA*\n` +
       `Risiti Na: #${sale.id}\n` +
-      `Tarehe: ${sale.date || 'Leo'} ${sale.time || ''}\n` +
       `Mteja: ${sale.customer_name}\n` +
       `Malipo: ${sale.payment_method}\n` +
       `Jumla: TZS ${Number(sale.total_amount).toLocaleString()}\n` +
-      `Ahsante kwa kufanya biashara nasi!`
+      `Ahsante na Karibu tena!`
     );
     window.open(`https://wa.me/${cleanPhone}?text=${msg}`, '_blank');
   };
@@ -238,56 +280,39 @@ export default function PointOfSale() {
   return (
     <div className="max-w-6xl mx-auto space-y-4 select-none font-sans pb-32 text-slate-100">
       
-      {/* 
-        ========================================================================
-        TOP SPEED BAR: Search, Barcode Input, Receipt History, Live Sync
-        ========================================================================
-      */}
+      {/* Top Search Bar */}
       <div className="bg-[#131926]/90 backdrop-blur-3xl p-4 rounded-[26px] border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.25)] flex flex-col sm:flex-row items-center justify-between gap-3">
-        
-        {/* Search Input */}
         <div className="relative flex-1 w-full">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Tafuta bidhaa kwa jina au barcode..."
+            placeholder="Tafuta bidhaa kuanza mauzo..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 rounded-full text-xs sm:text-sm bg-[#1a2336] border border-slate-700/80 text-white placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
-        {/* Action Controls */}
         <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-          
-          {/* Held Carts Counter */}
           {heldCarts.length > 0 && (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-bold">
-              <PauseCircle className="w-3.5 h-3.5 text-amber-400" />
+              <PauseCircle className="w-3.5 h-3.5" />
               <span>{heldCarts.length} Zilizosimama</span>
             </div>
           )}
 
-          {/* 💥 PAST RECEIPTS HISTORY BUTTON (Where every receipt is stored) 💥 */}
           <button
-            onClick={() => {
-              fetchPastSales();
-              setIsHistoryOpen(true);
-            }}
+            onClick={() => { fetchPastSales(); setIsHistoryOpen(true); }}
             className="py-2.5 px-4 rounded-full bg-[#1a2336] hover:bg-slate-700/70 border border-slate-700/80 text-xs font-bold text-slate-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
-            title="Tazama Risiti Zilizopita"
           >
-            <Receipt className="w-4 h-4 text-emerald-400" />
             <span>Risiti ({pastSales.length})</span>
           </button>
 
-          {/* Refresh Products */}
           <button
-            onClick={fetchProducts}
-            className="p-2.5 rounded-full bg-[#1a2336] text-slate-300 hover:text-white hover:bg-slate-700/70 border border-slate-700/80 transition-all cursor-pointer"
-            title="Sawazisha Bidhaa"
+            onClick={() => fetchProducts()}
+            className="p-2.5 rounded-full bg-[#1a2336] text-slate-300 hover:text-white border border-slate-700/80 transition-all cursor-pointer"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-400' : ''}`} />
+            <RefreshCw className="w-4 h-4" />
           </button>
         </div>
       </div>
@@ -302,7 +327,7 @@ export default function PointOfSale() {
               className={`py-1.5 px-4 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                 selectedCat === cat
                   ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
-                  : 'bg-[#131926]/80 text-slate-400 border border-slate-800 hover:text-white hover:bg-[#1a2336]'
+                  : 'bg-[#131926]/80 text-slate-400 border border-slate-800 hover:text-white'
               }`}
             >
               {cat}
@@ -311,7 +336,7 @@ export default function PointOfSale() {
         </div>
       )}
 
-      {/* Parked Carts Quick Resume Bar */}
+      {/* Held Carts Bar */}
       {heldCarts.length > 0 && (
         <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between gap-3 overflow-x-auto">
           <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5 shrink-0">
@@ -332,11 +357,7 @@ export default function PointOfSale() {
         </div>
       )}
 
-      {/* 
-        ========================================================================
-        MAIN REGISTER GRID: Product Grid (Left) + Cart (Right)
-        ========================================================================
-      */}
+      {/* Main Grid: Products Left + Running Cart Right */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         
         {/* Products Grid */}
@@ -345,9 +366,7 @@ export default function PointOfSale() {
             <div className="p-12 text-center rounded-[28px] bg-[#131926]/90 border border-white/10 space-y-2">
               <Store className="w-10 h-10 text-slate-500 mx-auto" />
               <h3 className="font-bold text-white">Hakuna Bidhaa Iliyopatikana</h3>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                Ingiza bidhaa kwenye tab ya Stoo (📦) ili zianze kuonekana hapa.
-              </p>
+              <p className="text-xs text-slate-400">Weka bidhaa kwenye tab ya Stoo (📦) kuanza kuuza.</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -386,7 +405,7 @@ export default function PointOfSale() {
           )}
         </div>
 
-        {/* Running Cart Column */}
+        {/* Live Running Cart */}
         <div className="lg:col-span-1 bg-[#131926]/90 backdrop-blur-3xl p-5 rounded-[28px] border border-white/10 shadow-[0_10px_35px_rgba(0,0,0,0.3)] space-y-4 sticky top-6">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <h2 className="font-black text-white text-sm flex items-center gap-2">
@@ -397,14 +416,14 @@ export default function PointOfSale() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleHoldCart}
-                  className="p-1.5 rounded-lg text-amber-400 hover:bg-amber-500/10 transition-colors cursor-pointer"
+                  className="p-1.5 rounded-lg text-amber-400 hover:bg-amber-500/10 cursor-pointer"
                   title="Simamisha Mauzo haya"
                 >
                   <PauseCircle className="w-4 h-4" />
                 </button>
                 <button 
                   onClick={() => setCart([])} 
-                  className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                  className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/10 cursor-pointer"
                   title="Futa Cart"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -416,7 +435,7 @@ export default function PointOfSale() {
           <div className="space-y-2.5 max-h-64 overflow-y-auto scrollbar-none">
             {cart.length === 0 ? (
               <p className="text-xs text-slate-400 text-center py-8">
-                Bofya bidhaa upande wa kushoto kuziweka kwenye orodha.
+                Bofya bidhaa upande wa kushoto kuziweka hapa.
               </p>
             ) : (
               cart.map((item) => (
@@ -448,7 +467,7 @@ export default function PointOfSale() {
             )}
           </div>
 
-          {/* Totals & Discount */}
+          {/* Cart Footer */}
           <div className="border-t border-slate-800 pt-3 space-y-2.5">
             <div className="flex justify-between items-center text-xs text-slate-400">
               <span>Jumla Ndogo:</span>
@@ -468,7 +487,7 @@ export default function PointOfSale() {
 
             <div className="flex justify-between items-center text-sm pt-2 border-t border-slate-800/80">
               <span className="font-bold text-slate-300">Jumla ya Kulipa:</span>
-              <span className="font-black text-xl text-blue-400">
+              <span className="font-black text-xl text-blue-400 font-mono">
                 TZS {grandTotal.toLocaleString()}
               </span>
             </div>
@@ -485,17 +504,11 @@ export default function PointOfSale() {
 
       </div>
 
-      {/* 
-        ========================================================================
-        CHECKOUT MODAL: Payment Options & Instant Chenji Calculator
-        ========================================================================
-      */}
+      {/* Checkout Modal */}
       <Modal isOpen={isCheckoutOpen} onClose={() => setIsCheckoutOpen(false)} title="Kamilisha Malipo">
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
-              Jina la Mteja (Hiari)
-            </label>
+            <label className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">Jina la Mteja (Hiari)</label>
             <input
               type="text"
               placeholder="Mf. Mama Baraka au Juma"
@@ -506,9 +519,7 @@ export default function PointOfSale() {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-300 mb-2 uppercase tracking-wider">
-              Njia ya Malipo
-            </label>
+            <label className="block text-xs font-bold text-slate-300 mb-2 uppercase tracking-wider">Njia ya Malipo</label>
             <div className="grid grid-cols-3 gap-2">
               {[
                 { id: 'Cash', label: 'Cash' },
@@ -533,13 +544,9 @@ export default function PointOfSale() {
             </div>
           </div>
 
-          {/* Cash Change Calculator */}
           {paymentMethod === 'Cash' && (
             <div className="p-3.5 bg-[#192132] rounded-2xl space-y-2 border border-slate-700">
-              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                Pesa Iliyotolewa na Mteja (TZS)
-              </label>
-              
+              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pesa Iliyotolewa na Mteja (TZS)</label>
               <input
                 type="number"
                 placeholder={`Mf. ${grandTotal.toLocaleString()}`}
@@ -575,9 +582,7 @@ export default function PointOfSale() {
 
           {paymentMethod === 'Deni' && (
             <div>
-              <label className="block text-xs font-bold text-amber-400 mb-1 uppercase tracking-wider">
-                Namba ya Simu (WhatsApp ya Mteja)
-              </label>
+              <label className="block text-xs font-bold text-amber-400 mb-1 uppercase tracking-wider">Namba ya Simu (WhatsApp ya Mteja)</label>
               <input
                 type="text"
                 placeholder="0712345678"
@@ -593,7 +598,6 @@ export default function PointOfSale() {
             <span className="text-blue-400 text-sm font-black">TZS {grandTotal.toLocaleString()}</span>
           </div>
 
-          {/* 💥 CALLS handleCompleteSale 💥 */}
           <button
             onClick={handleCompleteSale}
             disabled={loading}
@@ -604,11 +608,7 @@ export default function PointOfSale() {
         </div>
       </Modal>
 
-      {/* 
-        ========================================================================
-        NEW SALE RECEIPT MODAL
-        ========================================================================
-      */}
+      {/* Digital Receipt Modal */}
       {completedSale && (
         <Modal isOpen={true} onClose={() => setCompletedSale(null)} title="Risiti ya Mauzo">
           <div className="space-y-4 text-center py-2">
@@ -655,16 +655,10 @@ export default function PointOfSale() {
         </Modal>
       )}
 
-      {/* 
-        ========================================================================
-        💥 PAST RECEIPTS HISTORY DRAWER (Where all past receipts are stored) 💥
-        ========================================================================
-      */}
+      {/* Past Receipts Drawer Modal */}
       {isHistoryOpen && (
         <Modal isOpen={true} onClose={() => setIsHistoryOpen(false)} title="Historia ya Risiti Zilizopita">
           <div className="space-y-3">
-            <p className="text-xs text-slate-400">Risiti zote zilizorekodiwa kwenye mfumo:</p>
-
             <div className="space-y-2 max-h-80 overflow-y-auto scrollbar-none">
               {pastSales.length === 0 ? (
                 <div className="text-center py-8 text-xs text-slate-500">
@@ -742,6 +736,63 @@ export default function PointOfSale() {
             </button>
           </div>
         </Modal>
+      )}
+
+      {/* 
+        ========================================================================
+        💥 OWNER MASTER PIN PROMPT MODAL 💥
+        ========================================================================
+      */}
+      {isPinModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-fadeIn">
+          <div className="w-full max-w-xs p-6 rounded-[30px] bg-[#131926] border border-white/15 shadow-2xl text-center space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+              <Lock className="w-6 h-6" />
+            </div>
+
+            <div>
+              <h3 className="text-base font-black text-white">Weka PIN ya Mmiliki</h3>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Kutoa punguzo au mkopo kunahitaji uthibitisho wa PIN ya mmiliki.
+              </p>
+            </div>
+
+            {pinError && (
+              <p className="text-xs text-rose-400 font-bold bg-rose-950/40 border border-rose-800/60 p-2 rounded-xl">
+                {pinError}
+              </p>
+            )}
+
+            <form onSubmit={handleVerifyPin} className="space-y-4">
+              <input
+                type="password"
+                maxLength="4"
+                autoFocus
+                required
+                placeholder="••••"
+                value={enteredPin}
+                onChange={(e) => setEnteredPin(e.target.value)}
+                className="w-32 mx-auto py-2.5 text-center text-lg font-mono tracking-[0.4em] bg-white/[0.06] border border-white/20 rounded-xl text-white outline-none focus:ring-2 focus:ring-blue-500"
+              />
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPinModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-full bg-white/[0.08] text-xs font-bold text-slate-300"
+                >
+                  Ghairi
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-full bg-blue-600 hover:bg-blue-500 text-xs font-bold text-white shadow-md shadow-blue-600/30"
+                >
+                  Thibitisha ➔
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
     </div>
