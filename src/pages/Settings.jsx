@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   Globe, 
   Store, 
@@ -11,12 +11,12 @@ import {
   FileText, 
   Download, 
   Trash2, 
-  Percent, 
-  Phone, 
   Sliders, 
   X,
   Lock,
-  Sparkles
+  Phone,
+  SlidersHorizontal,
+  Cloud
 } from 'lucide-react';
 import { useLanguageStore } from '../store/useLanguageStore';
 import { api } from '../config';
@@ -24,32 +24,39 @@ import { api } from '../config';
 export default function Settings() {
   const { lang, toggleLang } = useLanguageStore();
 
-  // Theme Management
+  // Pillar 1: Theme Manager
   const [theme, setThemeState] = useState(() => {
     return localStorage.getItem('theme') || (document.documentElement.classList.contains('dark') ? 'dark' : 'light');
   });
 
-  // Store Configuration
+  // Pillar 2: Store Identity & Legal Details
   const [storeName, setStoreName] = useState(() => localStorage.getItem('duka_store_name') || 'Duka Poa Store');
   const [storePhone, setStorePhone] = useState(() => localStorage.getItem('duka_store_phone') || '');
-  const [receiptFooter, setReceiptFooter] = useState(() => localStorage.getItem('duka_receipt_footer') || 'Bidhaa zilizouzwa hazirudishwi. Ahsante na Karibu Tena!');
-  const [printerType, setPrinterType] = useState(() => localStorage.getItem('duka_printer_type') || '58mm'); // '58mm', '80mm', 'whatsapp'
+  const [storeLocation, setStoreLocation] = useState(() => localStorage.getItem('duka_store_location') || 'Dar es Salaam, Tanzania');
+  const [tinNumber, setTinNumber] = useState(() => localStorage.getItem('duka_tin_number') || '');
 
-  // Tax & Financial Settings
+  // Pillar 3: Receipt & Hardware Configuration
+  const [receiptFooter, setReceiptFooter] = useState(() => localStorage.getItem('duka_receipt_footer') || 'Bidhaa zilizouzwa hazirudishwi baada ya siku 2. Karibu tena!');
+  const [printerMode, setPrinterMode] = useState(() => localStorage.getItem('duka_printer_mode') || '58mm');
+
+  // Pillar 4: Financial & Tax (VAT) Policy
   const [vatEnabled, setVatEnabled] = useState(() => localStorage.getItem('duka_vat_enabled') === 'true');
   const [maxDiscount, setMaxDiscount] = useState(() => localStorage.getItem('duka_max_discount') || '10');
 
-  // Server Endpoint (Purged of developer jargon)
-  const [serverUrl, setServerUrl] = useState(() => {
-    return localStorage.getItem('custom_api_url') || 'https://duka-poa.onrender.com/api/v1';
-  });
+  // Pillar 5: Security (Owner Master PIN)
+  const [ownerPin, setOwnerPin] = useState(() => localStorage.getItem('duka_owner_pin') || '');
+
+  // Pillar 6: Server Connection (Zero Developer Jargon)
+  const [serverUrl, setServerUrl] = useState(
+    () => localStorage.getItem('custom_api_url') || 'https://duka-poa.onrender.com/api/v1'
+  );
 
   // Modals & Feedback
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
   const [isTermsOpen, setIsTermsOpen] = useState(false);
 
-  // Theme Toggle Effect
+  // Toggle Theme
   const handleThemeChange = (newTheme) => {
     setThemeState(newTheme);
     if (newTheme === 'dark') {
@@ -67,17 +74,20 @@ export default function Settings() {
     event.preventDefault();
     localStorage.setItem('duka_store_name', storeName.trim());
     localStorage.setItem('duka_store_phone', storePhone.trim());
+    localStorage.setItem('duka_store_location', storeLocation.trim());
+    localStorage.setItem('duka_tin_number', tinNumber.trim());
     localStorage.setItem('duka_receipt_footer', receiptFooter.trim());
-    localStorage.setItem('duka_printer_type', printerType);
+    localStorage.setItem('duka_printer_mode', printerMode);
     localStorage.setItem('duka_vat_enabled', vatEnabled ? 'true' : 'false');
     localStorage.setItem('duka_max_discount', maxDiscount);
+    localStorage.setItem('duka_owner_pin', ownerPin.trim());
     localStorage.setItem('custom_api_url', serverUrl.trim());
 
     setSavedSuccess(true);
     window.setTimeout(() => setSavedSuccess(false), 3000);
   };
 
-  // 1-Click Export to CSV
+  // 1-Click CSV Export
   const handleExportCSV = async () => {
     try {
       const res = await api.get('/products/');
@@ -102,9 +112,9 @@ export default function Settings() {
 
   // Safe Browser Cache Clear
   const handleClearCache = () => {
-    if (window.confirm('Je, una uhakika unataka kusafisha kumbukumbu ya muda ya kivinjari hiki? Data zako za seva zitabaki salama.')) {
+    if (window.confirm('Je, una uhakika unataka kusafisha kumbukumbu ya muda ya kivinjari? Data zako za seva zitabaki salama.')) {
+      localStorage.removeItem('duka_overview_cache');
       localStorage.removeItem('duka_cached_overview');
-      localStorage.removeItem('duka_last_sync');
       window.dispatchEvent(new Event('duka_sync'));
       alert('Kumbukumbu ya muda imesafishwa kikamilifu!');
     }
@@ -116,17 +126,15 @@ export default function Settings() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 pb-36 font-sans text-slate-900 transition-colors duration-300 dark:text-slate-100 select-none">
       
-      {/* Header */}
       <header>
         <h1 className="text-2xl font-black tracking-tight sm:text-3xl">
           Mipangilio ya Mfumo
         </h1>
         <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-          Dhibiti taarifa za duka, muundo wa risiti, kodi, lugha na usalama wa mfumo wako.
+          Usimamizi wa duka lako, risiti, kodi, usalama na sera za kisheria.
         </p>
       </header>
 
-      {/* Success Banner */}
       {savedSuccess && (
         <div
           role="status"
@@ -139,7 +147,7 @@ export default function Settings() {
 
       {/* 
         ========================================================================
-        1. THEME SWITCHER (DARK / LIGHT CONTROLLER ACROSS ALL PAGES)
+        1. THEME SWITCHER (DARK / LIGHT ACROSS ALL PAGES)
         ========================================================================
       */}
       <section className={`p-5 sm:p-6 space-y-4 ${glassCard}`}>
@@ -150,7 +158,7 @@ export default function Settings() {
           <div>
             <h2 className="text-base font-black">Mwonekano wa Rangi (Theme)</h2>
             <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-              Badili muundo wa rangi wa mfumo mzima kuanzia kaunta ya mauzo hadi dashibodi.
+              Badili muundo wa rangi wa mfumo mzima (Mwanga au Giza).
             </p>
           </div>
         </div>
@@ -229,18 +237,18 @@ export default function Settings() {
 
       {/* 
         ========================================================================
-        3. STORE PROFILE & RECEIPT SETTINGS
+        3. STORE DETAILS & RECEIPT CONFIGURATION FORM
         ========================================================================
       */}
       <form onSubmit={handleSaveSettings} className={`space-y-5 p-5 sm:p-6 ${glassCard}`}>
         <div className="flex items-center gap-3">
           <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-300/40 bg-emerald-500/10 text-emerald-700 dark:border-emerald-300/10 dark:text-emerald-400">
-            <Receipt className="h-5 w-5" />
+            <Store className="h-5 w-5" />
           </span>
           <div>
             <h2 className="text-base font-black">Taarifa za Duka & Muundo wa Risiti</h2>
             <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-              Maelezo yatakayoonekana juu na chini ya risiti za wateja.
+              Maelezo yatakayoonekana kwenye risiti za wateja.
             </p>
           </div>
         </div>
@@ -248,7 +256,7 @@ export default function Settings() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <label className="block">
             <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-              Jina la Duka (Kwenye Risiti)
+              Jina la Duka
             </span>
             <input
               type="text"
@@ -261,13 +269,38 @@ export default function Settings() {
 
           <label className="block">
             <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-              Simu ya Duka (WhatsApp)
+              Simu ya WhatsApp ya Duka
             </span>
             <input
               type="text"
               placeholder="07xxxxxxxx"
               value={storePhone}
               onChange={(e) => setStorePhone(e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 dark:border-white/10 bg-white/55 dark:bg-white/[0.05] px-4 py-2.5 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              Mahali Duka Lilipo (Location)
+            </span>
+            <input
+              type="text"
+              value={storeLocation}
+              onChange={(e) => setStoreLocation(e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 dark:border-white/10 bg-white/55 dark:bg-white/[0.05] px-4 py-2.5 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              Namba ya TIN / Leseni (Hiari)
+            </span>
+            <input
+              type="text"
+              placeholder="Mf. 123-456-789"
+              value={tinNumber}
+              onChange={(e) => setTinNumber(e.target.value)}
               className="w-full rounded-2xl border border-slate-200 dark:border-white/10 bg-white/55 dark:bg-white/[0.05] px-4 py-2.5 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
             />
           </label>
@@ -299,9 +332,9 @@ export default function Settings() {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setPrinterType(item.id)}
+                onClick={() => setPrinterMode(item.id)}
                 className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                  printerType === item.id 
+                  printerMode === item.id 
                     ? 'bg-blue-600 text-white border-blue-600 shadow-sm' 
                     : 'bg-white/40 dark:bg-white/[0.04] border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300'
                 }`}
@@ -312,11 +345,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* 
-          ========================================================================
-          4. TAX (VAT) & DISCOUNT RULES
-          ========================================================================
-        */}
+        {/* Financial & Tax Policies */}
         <div className="pt-3 border-t border-slate-200/60 dark:border-slate-800 space-y-3">
           <div className="flex items-center justify-between">
             <div>
@@ -334,8 +363,8 @@ export default function Settings() {
 
           <div className="flex items-center justify-between pt-1">
             <div>
-              <p className="text-xs font-bold text-slate-900 dark:text-white">Ukomo wa Punguzo kwa Kaunta (Max Discount)</p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">Kiwango cha juu cha asilimia ya punguzo muuzaji anaweza kutoa</p>
+              <p className="text-xs font-bold text-slate-900 dark:text-white">Ukomo wa Punguzo kwa Kaunta (Max Discount %)</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">Kiwango cha juu cha punguzo muuzaji anachoweza kutoa</p>
             </div>
             <div className="flex items-center gap-1.5">
               <input
@@ -351,11 +380,28 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Server Endpoint (Clean Business Wording) */}
+        {/* Security / Owner Master PIN */}
         <div className="pt-3 border-t border-slate-200/60 dark:border-slate-800">
           <label className="block">
             <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-              Anwani ya Seva ya Duka (Cloud Sync)
+              PIN ya Usalama ya Mmiliki (Master PIN - Namba 4)
+            </span>
+            <input
+              type="password"
+              maxLength="4"
+              placeholder="••••"
+              value={ownerPin}
+              onChange={(e) => setOwnerPin(e.target.value)}
+              className="w-40 rounded-xl border border-slate-200 dark:border-white/10 bg-white/55 dark:bg-white/[0.05] px-4 py-2 text-xs text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 text-center font-mono tracking-widest text-sm"
+            />
+          </label>
+        </div>
+
+        {/* Server Endpoint */}
+        <div className="pt-3 border-t border-slate-200/60 dark:border-slate-800">
+          <label className="block">
+            <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              Anwani ya Seva ya Duka (Cloud Sync Endpoint)
             </span>
             <input
               type="url"
@@ -378,7 +424,7 @@ export default function Settings() {
 
       {/* 
         ========================================================================
-        5. DATA BACKUP & CSV EXPORT
+        4. DATA BACKUP & CSV EXPORT
         ========================================================================
       */}
       <section className={`p-5 sm:p-6 space-y-4 ${glassCard}`}>
@@ -389,7 +435,7 @@ export default function Settings() {
           <div>
             <h2 className="text-base font-black">Nakala na Utunzaji wa Data</h2>
             <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-              Pakua taarifa zako za biashara au safisha kumbukumbu ya muda.
+              Pakua taarifa za biashara yako kwa ajili ya mahesabu ya nje.
             </p>
           </div>
         </div>
@@ -417,7 +463,7 @@ export default function Settings() {
 
       {/* 
         ========================================================================
-        6. PRIVACY POLICY & TERMS OF SERVICE (PDPA TANZANIA COMPLIANT)
+        5. PRIVACY POLICY & TERMS OF SERVICE (PDPA TANZANIA COMPLIANT)
         ========================================================================
       */}
       <section className={`p-5 sm:p-6 space-y-4 ${glassCard}`}>
@@ -428,7 +474,7 @@ export default function Settings() {
           <div>
             <h2 className="text-base font-black">Sheria, Masharti & Sera ya Faragha</h2>
             <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-              Ulinzi wa data za biashara yako chini ya sheria za Tanzania (PDPA Act 2022).
+              Ulinzi wa data za duka lako chini ya sheria ya Tanzania (PDPA Act 2022).
             </p>
           </div>
         </div>
@@ -454,11 +500,7 @@ export default function Settings() {
         </div>
       </section>
 
-      {/* 
-        ========================================================================
-        PRIVACY POLICY MODAL
-        ========================================================================
-      */}
+      {/* PRIVACY POLICY MODAL */}
       {isPrivacyOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-fadeIn">
           <div className="w-full max-w-lg p-6 sm:p-7 rounded-[32px] bg-white dark:bg-[#131926] border border-slate-200 dark:border-white/10 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
@@ -473,10 +515,10 @@ export default function Settings() {
 
             <div className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed space-y-3">
               <p>
-                <strong>1. Umiliki wa Data:</strong> Taarifa zote za duka lako (ikiwemo mauzo, idadi ya stoo, bei za bidhaa, na majina ya wateja wenye madeni) ni mali yako binafsi. Duka Poa haitawahi kuuza, kushiriki au kutoa data zako kwa wafanyabiashara wengine au washindani.
+                <strong>1. Umiliki wa Data:</strong> Taarifa zote za duka lako (ikiwemo mauzo, idadi ya stoo, bei za bidhaa, na majina ya wateja wenye madeni) ni mali yako binafsi. Duka Poa haitawahi kuuza au kutoa data zako kwa washindani au mtu wa tatu.
               </p>
               <p>
-                <strong>2. Usalama wa Kuhifadhi:</strong> Data zako zinasimbwa kwa njia ya siri (SSL/TLS encryption) pindi zinaposafirishwa kutoka kwenye simu yako kwenda kwenye seva ya mtandao iliyolindwa.
+                <strong>2. Usalama wa Kuhifadhi:</strong> Data zote zinasimbwa kwa njia ya siri (SSL/TLS encryption) pindi zinaposafirishwa kutoka kwenye simu yako kwenda kwenye seva ya mtandao iliyolindwa.
               </p>
               <p>
                 <strong>3. Sheria ya Ulinzi wa Taarifa Binafsi Tanzania (PDPA 2022):</strong> Mfumo huu unazingatia kikamilifu sheria ya ulinzi wa data za wateja na wafanyabiashara nchini Tanzania.
@@ -493,11 +535,7 @@ export default function Settings() {
         </div>
       )}
 
-      {/* 
-        ========================================================================
-        TERMS OF SERVICE MODAL
-        ========================================================================
-      */}
+      {/* TERMS OF SERVICE MODAL */}
       {isTermsOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-fadeIn">
           <div className="w-full max-w-lg p-6 sm:p-7 rounded-[32px] bg-white dark:bg-[#131926] border border-slate-200 dark:border-white/10 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
@@ -515,7 +553,7 @@ export default function Settings() {
                 <strong>1. Matumizi Halali ya Mfumo:</strong> Mfumo wa Duka Poa umetengenezwa kwa ajili ya kusaidia usimamizi wa hesabu, mauzo ya rejareja na stoo za maduka. Mtumiaji anawajibika kuhakikisha bei na nambari anazoingiza ni sahihi.
               </p>
               <p>
-                <strong>2. Hali ya Nje ya Mtandao (Offline):</strong> Mfumo una uwezo wa kufanya kazi bila intaneti na utatuma data kiotomatiki pindi mtandao utakapounganishwa tena.
+                <strong>2. Hali ya Nje ya Mtandao (Offline):</strong> Mfumo una uwezo wa kufanya kazi hata intaneti ikikatika na utatuma data kiotomatiki pindi mtandao utakapounganishwa tena.
               </p>
               <p>
                 <strong>3. Madeni ya Wateja:</strong> Mfumo hutoa daftari la kidijitali la kumbukumbu ya madeni; makubaliano ya mkopo na ulipaji yanabaki kuwa makubaliano kati ya duka na mteja husika.
